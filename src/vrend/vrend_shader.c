@@ -6140,14 +6140,15 @@ iter_instruction(struct tgsi_iterate_context *iter,
       break;
    }
 
-   for (uint32_t i = 0; i < 1; i++) {
-      enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(inst->Instruction.Opcode);
-      if (dtype == TGSI_TYPE_DOUBLE) {
-         emit_buff(&ctx->glsl_strbufs, "%s = uintBitsToFloat(unpackDouble2x32(%s));\n", fp64_dsts[0], dsts[0]);
-      }
-   }
    if (inst->Instruction.Saturate) {
       emit_buff(&ctx->glsl_strbufs, "%s = clamp(%s, 0.0, 1.0);\n", dsts[0], dsts[0]);
+   }
+
+   for (uint32_t i = 0; i < inst->Instruction.NumDstRegs; i++) {
+      enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(inst->Instruction.Opcode);
+      if (dtype == TGSI_TYPE_DOUBLE) {
+         emit_buff(&ctx->glsl_strbufs, "%s = uintBitsToFloat(unpackDouble2x32(%s));\n", fp64_dsts[i], dsts[i]);
+      }
    }
 
    if (strbuf_get_error(&ctx->glsl_strbufs.glsl_main))
