@@ -166,7 +166,8 @@ vkr_physical_device_init_id_properties(struct vkr_physical_device *physical_dev)
 }
 
 static void
-vkr_physical_device_init_memory_properties(struct vkr_physical_device *physical_dev)
+vkr_physical_device_init_memory_properties(struct vkr_physical_device *physical_dev,
+                                           struct vkr_context *ctx)
 {
    struct vn_physical_device_proc_table *vk = &physical_dev->proc_table;
 
@@ -227,6 +228,16 @@ vkr_physical_device_init_memory_properties(struct vkr_physical_device *physical_
           VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) &&
          (props.externalMemoryProperties.exportFromImportedHandleTypes &
           VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
+   }
+
+   if (physical_dev->EXT_external_memory_metal && ctx->on_worker_thread) {
+      info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT,
+      vk->GetPhysicalDeviceExternalBufferProperties(handle, &info, &props);
+      physical_dev->is_metal_export_supported =
+         (props.externalMemoryProperties.externalMemoryFeatures &
+          VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) &&
+         (props.externalMemoryProperties.exportFromImportedHandleTypes &
+          VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT);
    }
 
    /* fallback to gbm allocation with dma-buf import */
@@ -445,7 +456,7 @@ vkr_dispatch_vkEnumeratePhysicalDevices(struct vn_dispatch_context *dispatch,
       physical_dev->api_version =
          MIN2(physical_dev->properties.apiVersion, instance->api_version);
       vkr_physical_device_init_extensions(physical_dev);
-      vkr_physical_device_init_memory_properties(physical_dev);
+      vkr_physical_device_init_memory_properties(physical_dev, ctx);
       vkr_physical_device_init_id_properties(physical_dev);
       vkr_physical_device_init_queue_family_properties(physical_dev);
 

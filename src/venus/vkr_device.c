@@ -147,9 +147,11 @@ vkr_dispatch_vkCreateDevice(struct vn_dispatch_context *dispatch,
       for (uint32_t i = 0; i < args->pCreateInfo->enabledExtensionCount; i++)
          exts[ext_count++] = args->pCreateInfo->ppEnabledExtensionNames[i];
 
-#ifdef __APPLE__
+#ifdef VK_EXT_external_memory_metal
       if (physical_dev->EXT_external_memory_metal)
          exts[ext_count++] = VK_EXT_EXTERNAL_MEMORY_METAL_EXTENSION_NAME;
+#endif
+#ifdef VK_EXT_metal_objects
       if (physical_dev->EXT_metal_objects)
          exts[ext_count++] = VK_EXT_METAL_OBJECTS_EXTENSION_NAME;
 #endif
