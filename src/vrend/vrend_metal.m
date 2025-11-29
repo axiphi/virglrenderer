@@ -119,6 +119,40 @@ bool virgl_metal_create_texture(MTLDevice_id device,
    return false;
 }
 
+bool virgl_metal_create_texture_from_heap(MTLHeap_id heap,
+                                          const struct vrend_metal_texture_description *desc,
+                                          MTLTexture_id *tex)
+{
+   id<MTLHeap> mtl_heap = (id<MTLHeap>)heap;
+   id<MTLDevice> mtl_device = mtl_heap.device;
+   MTLTextureDescriptor *descriptor = new_descriptor(desc);
+   *tex = nil;
+   if (descriptor) {
+      NSUInteger deviceAlignment, bytesPerRow;
+      /* swap B/R for existing texture */
+      if (desc->format == VIRGL_FORMAT_B8G8R8X8_UNORM || desc->format == VIRGL_FORMAT_B8G8R8A8_UNORM) {
+         descriptor.pixelFormat = MTLPixelFormatRGBA8Unorm;
+      }
+      /* Regardless of what we want, we have to respect the heap's options */
+      descriptor.resourceOptions = mtl_heap.resourceOptions;
+      deviceAlignment = [mtl_device minimumLinearTextureAlignmentForPixelFormat:descriptor.pixelFormat];
+      bytesPerRow = align(desc->stride, deviceAlignment);
+      id<MTLBuffer> mtl_buffer = [mtl_heap newBufferWithLength:bytesPerRow * desc->height
+                                                       options:mtl_heap.resourceOptions
+                                                        offset:0];
+      if (mtl_buffer) {
+         *tex = [mtl_buffer newTextureWithDescriptor:descriptor
+                                              offset:0
+                                         bytesPerRow:bytesPerRow];
+         [mtl_buffer release];
+      }
+      [descriptor release];
+      return !!*tex;
+   }
+
+   return false;
+}
+
 void virgl_metal_release_texture(MTLTexture_id tex)
 {
    id<MTLTexture> mtl_texture = (id<MTLTexture>)tex;
