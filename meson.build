@@ -219,6 +219,11 @@ if cc.has_header('linux/udmabuf.h')
    conf_data.set('HAVE_LINUX_UDMABUF_H', 1)
 endif
 
+metal_dep = dependency('appleframeworks', modules : ['Metal'], required: false)
+if metal_dep.found()
+   conf_data.set('ENABLE_METAL', 1)
+endif
+
 foreach b : ['bswap32', 'bswap64', 'clz', 'clzll', 'expect', 'ffs', 'ffsll',
              'popcount', 'popcountll', 'types_compatible_p', 'unreachable']
   if cc.has_function(b)
@@ -349,7 +354,7 @@ with_venus = get_option('venus')
 with_render_server = with_venus
 with_render_server_worker = get_option('render-server-worker')
 render_server_install_dir = get_option('prefix') / get_option('libexecdir')
-if with_venus and with_host_darwin
+if metal_dep.found() and with_host_darwin
    add_languages('objc', required: true)
    objcc = meson.get_compiler('objc')
    add_project_arguments(objcc.get_supported_arguments(warnings), language : 'objc')
@@ -376,7 +381,7 @@ if with_venus
       venus_dep += declare_dependency(
          compile_args : ['-DVK_USE_PLATFORM_METAL_EXT', '-DVK_ENABLE_BETA_EXTENSIONS'],
          dependencies : [
-            dependency('appleframeworks', modules: ['Metal'], required: true),
+            metal_dep,
             dependency('appleframeworks', modules: ['Foundation'], required: true),
          ],
       )
@@ -435,7 +440,7 @@ configure_file(input : 'config.h.meson',
 
 add_project_arguments('-imacros', meson.current_build_dir() / 'config.h', language : 'c')
 add_project_arguments('-DHAVE_CONFIG_H=1', language : 'c')
-if with_venus and with_host_darwin
+if metal_dep.found() and with_host_darwin
    add_project_arguments('-imacros', meson.current_build_dir() / 'config.h', language : 'objc')
    add_project_arguments('-DHAVE_CONFIG_H=1', language : 'objc')
 endif
@@ -471,6 +476,7 @@ summary({'c_args': (' ').join(get_option('c_args')),
         'egl': have_egl,
         'glx': have_glx,
         'gbm': gbm_dep.found(),
+        'metal': metal_dep.found(),
         'venus': with_venus,
         'drm-amdgpu': with_drm_amdgpu,
         'drm-asahi': with_drm_asahi,
