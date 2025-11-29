@@ -133,6 +133,7 @@ vkr_dispatch_vkCreateDevice(struct vn_dispatch_context *dispatch,
    uint32_t ext_count = args->pCreateInfo->enabledExtensionCount;
    ext_count += physical_dev->EXT_external_memory_metal;
    ext_count += physical_dev->EXT_metal_objects;
+   ext_count += physical_dev->KHR_portability_subset;
    ext_count += physical_dev->KHR_external_memory_fd;
    ext_count += physical_dev->EXT_external_memory_dma_buf;
    ext_count += physical_dev->KHR_external_fence_fd;
@@ -154,6 +155,10 @@ vkr_dispatch_vkCreateDevice(struct vn_dispatch_context *dispatch,
 #ifdef VK_EXT_metal_objects
       if (physical_dev->EXT_metal_objects)
          exts[ext_count++] = VK_EXT_METAL_OBJECTS_EXTENSION_NAME;
+#endif
+#ifdef VK_KHR_portability_subset
+      if (physical_dev->KHR_portability_subset)
+         exts[ext_count++] = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
 #endif
       if (physical_dev->KHR_external_memory_fd)
          exts[ext_count++] = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;

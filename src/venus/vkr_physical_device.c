@@ -300,6 +300,9 @@ vkr_physical_device_init_extensions(struct vkr_physical_device *physical_dev)
       } else if (!strcmp(props->extensionName, "VK_EXT_metal_objects")) {
          physical_dev->EXT_metal_objects = true;
          hidden = true;
+      } else if (!strcmp(props->extensionName, "VK_KHR_portability_subset")) {
+         physical_dev->KHR_portability_subset = true;
+         hidden = true;
       }
 
       if (hidden) {
