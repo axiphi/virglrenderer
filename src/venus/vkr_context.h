@@ -29,6 +29,8 @@ struct vkr_resource {
       int fd;
       /* valid when fd_type is shm */
       uint8_t *data;
+      /* valid when fd_type is metal heap */
+      void *metal_heap;
    } u;
 
    size_t size;
