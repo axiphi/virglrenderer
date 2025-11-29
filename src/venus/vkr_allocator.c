@@ -53,6 +53,7 @@ struct vkr_inst_proc_table {
    PFN_vkGetPhysicalDeviceProperties2 GetPhysicalDeviceProperties2;
    PFN_vkCreateDevice CreateDevice;
    PFN_vkGetDeviceProcAddr GetDeviceProcAddr;
+   PFN_vkEnumerateDeviceExtensionProperties EnumerateDeviceExtensionProperties;
 };
 
 struct vkr_dev_proc_table {
@@ -108,6 +109,41 @@ vkr_allocator_get_dev_idx(struct virgl_resource *res)
    }
 
    return VKR_ALLOCATOR_MAX_DEVICE_COUNT;
+}
+
+static const char *
+vkr_allocator_get_external_mem_ext(struct vkr_inst_proc_table *vk,
+                                   VkPhysicalDevice handle)
+{
+   VkExtensionProperties *exts;
+   uint32_t count;
+   VkResult result = vk->EnumerateDeviceExtensionProperties(handle, NULL, &count, NULL);
+   if (result != VK_SUCCESS)
+      return NULL;
+
+   exts = malloc(sizeof(*exts) * count);
+   if (!exts)
+      return NULL;
+
+   result = vk->EnumerateDeviceExtensionProperties(handle, NULL, &count, exts);
+   if (result != VK_SUCCESS) {
+      free(exts);
+      return NULL;
+   }
+
+   const char *name = NULL;
+   for (uint32_t i = 0; i < count; i++) {
+      VkExtensionProperties *props = &exts[i];
+
+      if (!strcmp(props->extensionName, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME)) {
+         name = VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME;
+         break;
+      }
+   }
+
+   free(exts);
+
+   return name;
 }
 
 static struct vkr_opaque_fd_mem_info *
@@ -210,6 +246,7 @@ vkr_allocator_inst_proc_table_init(VkInstance inst_handle,
    vk->GetPhysicalDeviceProperties2 = VN_GIPA(vkGetPhysicalDeviceProperties2);
    vk->CreateDevice = VN_GIPA(vkCreateDevice);
    vk->GetDeviceProcAddr = VN_GIPA(vkGetDeviceProcAddr);
+   vk->EnumerateDeviceExtensionProperties = VN_GIPA(vkEnumerateDeviceExtensionProperties);
 #undef VN_GIPA
 }
 
@@ -230,9 +267,7 @@ vkr_allocator_dev_proc_table_init(VkDevice dev_handle,
 int
 vkr_allocator_init(void)
 {
-   static const char *required_extensions[] = {
-      "VK_KHR_external_memory_fd",
-   };
+   const char *required_extension;
    struct vkr_inst_proc_table *vk = &vkr_allocator.proc_table;
    VkResult res;
 
@@ -299,6 +334,11 @@ vkr_allocator_init(void)
 
       memcpy(vkr_allocator.device_uuids[i], id_props.deviceUUID, VK_UUID_SIZE);
 
+      required_extension = vkr_allocator_get_external_mem_ext(vk, physical_dev_handle);
+      if (!required_extension) {
+         continue;
+      }
+
       float priority = 1.0;
       VkDeviceQueueCreateInfo queue_info = {
          .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -313,8 +353,8 @@ vkr_allocator_init(void)
          .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
          .queueCreateInfoCount = 1,
          .pQueueCreateInfos = &queue_info,
-         .enabledExtensionCount = ARRAY_SIZE(required_extensions),
-         .ppEnabledExtensionNames = required_extensions,
+         .enabledExtensionCount = 1,
+         .ppEnabledExtensionNames = &required_extension,
       };
 
       res = vk->CreateDevice(physical_dev_handle, &dev_info, NULL,
