@@ -56,6 +56,7 @@
 
 #include "virglrenderer.h"
 #include "virtgpu_drm.h"
+#include "rocm/hsakmt_device.h"
 
 #include "virgl_context.h"
 #include "virgl_fence.h"
@@ -76,6 +77,7 @@ struct global_state {
    bool proxy_initialized;
    bool external_winsys_initialized;
    bool drm_initialized;
+   bool vhsakmt_initialized;
    bool fence_initialized;
 };
 
@@ -209,6 +211,10 @@ void virgl_renderer_fill_caps(uint32_t set, uint32_t version,
       if (state.drm_initialized)
          drm_renderer_capset(caps);
       break;
+   case VIRGL_RENDERER_CAPSET_HSAKMT:
+      if (state.vhsakmt_initialized)
+         vhsakmt_device_get_capset(set, caps);
+      break;
    default:
       break;
    }
@@ -280,6 +286,11 @@ int virgl_renderer_context_create_with_flags(uint32_t ctx_id,
       if (!state.drm_initialized)
          return EINVAL;
       ctx = drm_renderer_create(nlen, name, get_drm_fd());
+      break;
+   case VIRGL_RENDERER_CAPSET_HSAKMT:
+      if (!state.vhsakmt_initialized)
+         return EINVAL;
+      ctx = vhsakmt_device_create(nlen, name);
       break;
    default:
       return EINVAL;
@@ -631,6 +642,10 @@ void virgl_renderer_get_cap_set(uint32_t cap_set, uint32_t *max_ver,
       *max_ver = 0;
       *max_size = drm_renderer_capset(NULL);
       break;
+   case VIRGL_RENDERER_CAPSET_HSAKMT:
+      *max_ver = 1;
+      *max_size = vhsakmt_device_get_capset(cap_set, NULL);
+      break;
    default:
       *max_ver = 0;
       *max_size = 0;
@@ -849,6 +864,9 @@ void virgl_renderer_cleanup(UNUSED void *cookie)
       vrend_renderer_fini();
 #endif
 
+   if (state.vhsakmt_initialized)
+      vhsakmt_device_fini();
+
    if (state.fence_initialized)
       virgl_fence_table_cleanup();
 
@@ -1035,6 +1053,13 @@ int virgl_renderer_init(void *cookie, int flags, struct virgl_renderer_callbacks
       state.drm_initialized = true;
    }
 
+   if ((flags & VIRGL_RENDERER_USE_ROCM)) {
+      ret = vhsakmt_device_init();
+      if (ret)
+         goto fail;
+      state.vhsakmt_initialized = true;
+   }
+
    if (!state.fence_initialized) {
       ret = virgl_fence_table_init();
       if (ret) {
@@ -1100,6 +1125,9 @@ void virgl_renderer_reset(void)
    if (state.vrend_initialized)
       vrend_renderer_reset();
 #endif
+
+   if (state.vrend_initialized)
+      vhsakmt_device_reset();
 
    if (state.drm_initialized)
       drm_renderer_reset();
