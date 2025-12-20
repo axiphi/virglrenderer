@@ -25,6 +25,8 @@ struct render_context {
 
    int timeline_count;
 
+   bool in_process;
+
    /* optional */
    int fence_eventfd;
 };
