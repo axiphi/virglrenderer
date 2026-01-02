@@ -27,6 +27,7 @@ endif
 virgl_render_server = executable(
    'virgl_render_server',
    virgl_render_server_sources,
+   c_args : [ '-DSTANDALONE_SERVER=1' ],
    dependencies : virgl_render_server_depends,
    install : true,
    install_dir : render_server_install_dir,
