@@ -25,6 +25,8 @@
  *   vkGetMemoryFdKHR
  *   vkGetMemoryFdPropertiesKHR
  *   vkMapMemory2
+ *   vkGetMemoryMetalHandleEXT
+ *   vkGetMemoryMetalHandlePropertiesEXT
  */
 
 /* struct VkExportMemoryAllocateInfo chain */
@@ -84,6 +86,73 @@ vn_replace_VkExportMemoryAllocateInfo_handle(VkExportMemoryAllocateInfo *val)
     } while (pnext);
 }
 
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+/* struct VkImportMemoryMetalHandleInfoEXT chain */
+
+static inline void *
+vn_decode_VkImportMemoryMetalHandleInfoEXT_pnext_temp(struct vn_cs_decoder *dec)
+{
+    /* no known/supported struct */
+    if (vn_decode_simple_pointer(dec))
+        vn_cs_decoder_set_fatal(dec);
+    return NULL;
+}
+
+static inline void
+vn_decode_VkImportMemoryMetalHandleInfoEXT_self_temp(struct vn_cs_decoder *dec, VkImportMemoryMetalHandleInfoEXT *val)
+{
+    /* skip val->{sType,pNext} */
+    vn_decode_VkExternalMemoryHandleTypeFlagBits(dec, &val->handleType);
+    if (vn_decode_simple_pointer(dec)) {
+        vn_cs_decoder_set_fatal(dec);
+    } else {
+        val->handle = NULL;
+    }
+}
+
+static inline void
+vn_decode_VkImportMemoryMetalHandleInfoEXT_temp(struct vn_cs_decoder *dec, VkImportMemoryMetalHandleInfoEXT *val)
+{
+    VkStructureType stype;
+    vn_decode_VkStructureType(dec, &stype);
+    if (stype != VK_STRUCTURE_TYPE_IMPORT_MEMORY_METAL_HANDLE_INFO_EXT)
+        vn_cs_decoder_set_fatal(dec);
+
+    val->sType = stype;
+    val->pNext = vn_decode_VkImportMemoryMetalHandleInfoEXT_pnext_temp(dec);
+    vn_decode_VkImportMemoryMetalHandleInfoEXT_self_temp(dec, val);
+}
+
+static inline void
+vn_replace_VkImportMemoryMetalHandleInfoEXT_handle_self(VkImportMemoryMetalHandleInfoEXT *val)
+{
+    /* skip val->sType */
+    /* skip val->pNext */
+    /* skip val->handleType */
+    /* skip val->handle */
+}
+
+static inline void
+vn_replace_VkImportMemoryMetalHandleInfoEXT_handle(VkImportMemoryMetalHandleInfoEXT *val)
+{
+    struct VkBaseOutStructure *pnext = (struct VkBaseOutStructure *)val;
+
+    do {
+        switch ((int32_t)pnext->sType) {
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+        case VK_STRUCTURE_TYPE_IMPORT_MEMORY_METAL_HANDLE_INFO_EXT:
+            vn_replace_VkImportMemoryMetalHandleInfoEXT_handle_self((VkImportMemoryMetalHandleInfoEXT *)pnext);
+            break;
+#endif
+        default:
+            /* ignore unknown/unsupported struct */
+            break;
+        }
+        pnext = pnext->pNext;
+    } while (pnext);
+}
+
+#endif
 /* struct VkMemoryAllocateFlagsInfo chain */
 
 static inline void *
@@ -337,6 +406,16 @@ vn_decode_VkMemoryAllocateInfo_pnext_temp(struct vn_cs_decoder *dec)
             vn_decode_VkExportMemoryAllocateInfo_self_temp(dec, (VkExportMemoryAllocateInfo *)pnext);
         }
         break;
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+    case VK_STRUCTURE_TYPE_IMPORT_MEMORY_METAL_HANDLE_INFO_EXT:
+        pnext = vn_cs_decoder_alloc_temp(dec, sizeof(VkImportMemoryMetalHandleInfoEXT));
+        if (pnext) {
+            pnext->sType = stype;
+            ((VkImportMemoryMetalHandleInfoEXT *)pnext)->pNext = vn_decode_VkMemoryAllocateInfo_pnext_temp(dec);
+            vn_decode_VkImportMemoryMetalHandleInfoEXT_self_temp(dec, (VkImportMemoryMetalHandleInfoEXT *)pnext);
+        }
+        break;
+#endif
     case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO:
         pnext = vn_cs_decoder_alloc_temp(dec, sizeof(VkMemoryAllocateFlagsInfo));
         if (pnext) {
@@ -423,6 +502,11 @@ vn_replace_VkMemoryAllocateInfo_handle(VkMemoryAllocateInfo *val)
         case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO:
             vn_replace_VkExportMemoryAllocateInfo_handle_self((VkExportMemoryAllocateInfo *)pnext);
             break;
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+        case VK_STRUCTURE_TYPE_IMPORT_MEMORY_METAL_HANDLE_INFO_EXT:
+            vn_replace_VkImportMemoryMetalHandleInfoEXT_handle_self((VkImportMemoryMetalHandleInfoEXT *)pnext);
+            break;
+#endif
         case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO:
             vn_replace_VkMemoryAllocateFlagsInfo_handle_self((VkMemoryAllocateFlagsInfo *)pnext);
             break;
