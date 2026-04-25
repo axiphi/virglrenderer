@@ -286,17 +286,25 @@ vkr_physical_device_init_extensions(struct vkr_physical_device *physical_dev)
    uint32_t advertised_count = 0;
    for (uint32_t i = 0; i < count; i++) {
       VkExtensionProperties *props = &exts[i];
+      bool hidden = false;
 
-      if (!strcmp(props->extensionName, "VK_KHR_external_memory_fd"))
+      if (!strcmp(props->extensionName, "VK_KHR_external_memory_fd")) {
          physical_dev->KHR_external_memory_fd = true;
-      else if (!strcmp(props->extensionName, "VK_EXT_external_memory_dma_buf"))
+      } else if (!strcmp(props->extensionName, "VK_EXT_external_memory_dma_buf")) {
          physical_dev->EXT_external_memory_dma_buf = true;
-      else if (!strcmp(props->extensionName, "VK_KHR_external_fence_fd"))
+      } else if (!strcmp(props->extensionName, "VK_KHR_external_fence_fd")) {
          physical_dev->KHR_external_fence_fd = true;
-      else if (!strcmp(props->extensionName, "VK_EXT_external_memory_metal"))
+      } else if (!strcmp(props->extensionName, "VK_EXT_external_memory_metal")) {
          physical_dev->EXT_external_memory_metal = true;
-      else if (!strcmp(props->extensionName, "VK_EXT_metal_objects"))
+         hidden = true;
+      } else if (!strcmp(props->extensionName, "VK_EXT_metal_objects")) {
          physical_dev->EXT_metal_objects = true;
+         hidden = true;
+      }
+
+      if (hidden) {
+         continue;
+      }
 
       const uint32_t spec_ver = vkr_extension_get_spec_version(props->extensionName);
       if (spec_ver) {
