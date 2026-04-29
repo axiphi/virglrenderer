@@ -166,7 +166,8 @@ vkr_physical_device_init_id_properties(struct vkr_physical_device *physical_dev)
 }
 
 static void
-vkr_physical_device_init_memory_properties(struct vkr_physical_device *physical_dev)
+vkr_physical_device_init_memory_properties(struct vkr_physical_device *physical_dev,
+                                           struct vkr_context *ctx)
 {
    struct vn_physical_device_proc_table *vk = &physical_dev->proc_table;
 
@@ -229,6 +230,16 @@ vkr_physical_device_init_memory_properties(struct vkr_physical_device *physical_
           VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
    }
 
+   if (physical_dev->EXT_external_memory_metal && ctx->on_worker_thread) {
+      info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT,
+      vk->GetPhysicalDeviceExternalBufferProperties(handle, &info, &props);
+      physical_dev->is_metal_export_supported =
+         (props.externalMemoryProperties.externalMemoryFeatures &
+          VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) &&
+         (props.externalMemoryProperties.exportFromImportedHandleTypes &
+          VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT);
+   }
+
    /* fallback to gbm allocation with dma-buf import */
    if (!physical_dev->is_dma_buf_fd_export_supported &&
        !physical_dev->is_opaque_fd_export_supported &&
@@ -275,17 +286,28 @@ vkr_physical_device_init_extensions(struct vkr_physical_device *physical_dev)
    uint32_t advertised_count = 0;
    for (uint32_t i = 0; i < count; i++) {
       VkExtensionProperties *props = &exts[i];
+      bool hidden = false;
 
-      if (!strcmp(props->extensionName, "VK_KHR_external_memory_fd"))
+      if (!strcmp(props->extensionName, "VK_KHR_external_memory_fd")) {
          physical_dev->KHR_external_memory_fd = true;
-      else if (!strcmp(props->extensionName, "VK_EXT_external_memory_dma_buf"))
+      } else if (!strcmp(props->extensionName, "VK_EXT_external_memory_dma_buf")) {
          physical_dev->EXT_external_memory_dma_buf = true;
-      else if (!strcmp(props->extensionName, "VK_KHR_external_fence_fd"))
+      } else if (!strcmp(props->extensionName, "VK_KHR_external_fence_fd")) {
          physical_dev->KHR_external_fence_fd = true;
-      else if (!strcmp(props->extensionName, "VK_EXT_external_memory_metal"))
+      } else if (!strcmp(props->extensionName, "VK_EXT_external_memory_metal")) {
          physical_dev->EXT_external_memory_metal = true;
-      else if (!strcmp(props->extensionName, "VK_EXT_metal_objects"))
+         hidden = true;
+      } else if (!strcmp(props->extensionName, "VK_EXT_metal_objects")) {
          physical_dev->EXT_metal_objects = true;
+         hidden = true;
+      } else if (!strcmp(props->extensionName, "VK_KHR_portability_subset")) {
+         physical_dev->KHR_portability_subset = true;
+         hidden = true;
+      }
+
+      if (hidden) {
+         continue;
+      }
 
       const uint32_t spec_ver = vkr_extension_get_spec_version(props->extensionName);
       if (spec_ver) {
@@ -445,7 +467,7 @@ vkr_dispatch_vkEnumeratePhysicalDevices(struct vn_dispatch_context *dispatch,
       physical_dev->api_version =
          MIN2(physical_dev->properties.apiVersion, instance->api_version);
       vkr_physical_device_init_extensions(physical_dev);
-      vkr_physical_device_init_memory_properties(physical_dev);
+      vkr_physical_device_init_memory_properties(physical_dev, ctx);
       vkr_physical_device_init_id_properties(physical_dev);
       vkr_physical_device_init_queue_family_properties(physical_dev);
 

@@ -60,6 +60,10 @@ vrend_winsys_glx_sources = [
    'vrend/vrend_winsys_glx.c',
 ]
 
+vrend_metal_sources = [
+   'vrend/vrend_metal.m',
+]
+
 venus_sources = [
    'venus/vkr_acceleration_structure.c',
    'venus/vkr_allocator.c',
@@ -154,6 +158,16 @@ proxy_sources = [
    'proxy/proxy_socket.c',
 ]
 
+server_sources = [
+   '../server/render_client.c',
+   '../server/render_common.c',
+   '../server/render_context.c',
+   '../server/render_server.c',
+   '../server/render_socket.c',
+   '../server/render_state.c',
+   '../server/render_worker.c',
+]
+
 video_sources = [
    'vrend/virgl_video.c',
    'vrend/vrend_video.c',
@@ -196,6 +210,11 @@ if have_glx
    virgl_depends += [glx_dep]
 endif
 
+if metal_dep.found()
+   virgl_sources += vrend_metal_sources
+   virgl_depends += [metal_dep]
+endif
+
 if with_venus
    virgl_sources += venus_sources
    virgl_sources += venus_codegen
@@ -232,6 +251,10 @@ endif
 
 if with_render_server
    virgl_sources += proxy_sources
+endif
+
+if with_render_server_worker == 'thread'
+   virgl_sources += server_sources
 endif
 
 if with_video

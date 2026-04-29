@@ -69,7 +69,9 @@ vkr_renderer_init(uint32_t flags, const struct vkr_renderer_callbacks *cbs)
       return false;
 
    vkr_debug_init();
-   virgl_log_set_handler(cbs->debug_logger, NULL, NULL);
+
+   if (cbs->debug_logger)
+      virgl_log_set_handler(cbs->debug_logger, NULL, NULL);
 
    vkr_state.cbs = cbs;
    list_inithead(&vkr_state.contexts);
@@ -177,6 +179,7 @@ vkr_renderer_create_resource(uint32_t ctx_id,
                              uint32_t blob_flags,
                              enum virgl_resource_fd_type *out_fd_type,
                              int *out_res_fd,
+                             void **out_res_ptr,
                              uint32_t *out_map_info,
                              struct virgl_resource_vulkan_info *out_vulkan_info)
 {
@@ -194,13 +197,17 @@ vkr_renderer_create_resource(uint32_t ctx_id,
       return false;
 
    assert(blob.type == VIRGL_RESOURCE_FD_SHM || blob.type == VIRGL_RESOURCE_FD_DMABUF ||
-          blob.type == VIRGL_RESOURCE_FD_OPAQUE);
+          blob.type == VIRGL_RESOURCE_FD_OPAQUE || blob.type == VIRGL_RESOURCE_METAL_HEAP);
 
    *out_fd_type = blob.type;
-   *out_res_fd = blob.u.fd;
+   if (blob.type == VIRGL_RESOURCE_METAL_HEAP) {
+      *out_res_ptr = blob.u.metal_heap;
+   } else {
+      *out_res_fd = blob.u.fd;
+   }
    *out_map_info = blob.map_info;
 
-   if (blob.type == VIRGL_RESOURCE_FD_OPAQUE) {
+   if (blob.type == VIRGL_RESOURCE_FD_OPAQUE || blob.type == VIRGL_RESOURCE_METAL_HEAP) {
       assert(out_vulkan_info);
       *out_vulkan_info = blob.vulkan_info;
    }

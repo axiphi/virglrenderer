@@ -93,6 +93,7 @@ render_state_lookup_context(uint32_t ctx_id)
    return ctx;
 }
 
+#ifdef STANDALONE_SERVER
 static void
 render_state_cb_debug_logger(UNUSED enum virgl_log_level_flags log_level,
                              const char *message,
@@ -100,6 +101,7 @@ render_state_cb_debug_logger(UNUSED enum virgl_log_level_flags log_level,
 {
    render_log(message);
 }
+#endif
 
 static void
 render_state_cb_retire_fence(uint32_t ctx_id, uint32_t ring_idx, uint64_t fence_id)
@@ -112,7 +114,9 @@ render_state_cb_retire_fence(uint32_t ctx_id, uint32_t ring_idx, uint64_t fence_
 }
 
 static const struct vkr_renderer_callbacks render_state_cbs = {
+#ifdef STANDALONE_SERVER
    .debug_logger = render_state_cb_debug_logger,
+#endif
    .retire_fence = render_state_cb_retire_fence,
 };
 
@@ -221,13 +225,14 @@ render_state_create_resource(uint32_t ctx_id,
                              uint32_t blob_flags,
                              enum virgl_resource_fd_type *out_fd_type,
                              int *out_res_fd,
+                             void **out_res_ptr,
                              uint32_t *out_map_info,
                              struct virgl_resource_vulkan_info *out_vulkan_info)
 {
    SCOPE_LOCK_RENDERER();
    return vkr_renderer_create_resource(ctx_id, res_id, blob_id, blob_size, blob_flags,
-                                       out_fd_type, out_res_fd, out_map_info,
-                                       out_vulkan_info);
+                                       out_fd_type, out_res_fd, out_res_ptr,
+                                       out_map_info, out_vulkan_info);
 }
 
 bool
