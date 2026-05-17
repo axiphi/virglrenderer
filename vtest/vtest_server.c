@@ -80,6 +80,7 @@ struct vtest_server
 {
    const char *socket_name;
    int socket;
+   int tcp_port; /* 0 = disabled */
    const char *read_file;
 
    const char *render_device;
@@ -176,6 +177,7 @@ while (__AFL_LOOP(1000)) {
 #define OPT_NO_VIRGL 'g'
 #define OPT_COMPAT_PROFILE 'c'
 #define OPT_DRM 'd'
+#define OPT_TCP_PORT 't'
 
 static void vtest_server_parse_args(int argc, char **argv)
 {
@@ -194,6 +196,7 @@ static void vtest_server_parse_args(int argc, char **argv)
       {"no-virgl",            no_argument, NULL, OPT_NO_VIRGL},
       {"compat",              no_argument, NULL, OPT_COMPAT_PROFILE},
       {"drm",                 no_argument, NULL, OPT_DRM},
+      {"tcp-port",            required_argument, NULL, OPT_TCP_PORT},
       {0, 0, 0, 0}
    };
 
@@ -242,6 +245,9 @@ static void vtest_server_parse_args(int argc, char **argv)
 #endif
       case OPT_SOCKET_PATH:
          server.socket_name = optarg;
+         break;
+      case OPT_TCP_PORT:
+         server.tcp_port = atoi(optarg);
          break;
 #ifdef ENABLE_DRM
       case OPT_DRM:
@@ -404,6 +410,32 @@ static void vtest_server_open_read_file(void)
 
 static void vtest_server_open_socket(void)
 {
+   if (server.tcp_port > 0) {
+      /* TCP-only mode for Wine/Windows clients - no Unix socket */
+      struct sockaddr_in addr;
+      server.socket = socket(PF_INET, SOCK_STREAM, 0);
+      if (server.socket < 0) goto err;
+
+      int reuse = 1;
+      setsockopt(server.socket, SOL_SOCKET, SO_REUSEADDR,
+                 &reuse, sizeof(reuse));
+
+      memset(&addr, 0, sizeof(addr));
+      addr.sin_family = AF_INET;
+      addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+      addr.sin_port = htons(server.tcp_port);
+
+      if (bind(server.socket, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+         goto err;
+      if (listen(server.socket, 4) < 0)
+         goto err;
+
+      fprintf(stderr, "Listening on TCP port %d (no Unix socket)\n", server.tcp_port);
+      fflush(stderr);
+      return;
+   }
+
+   /* Unix socket mode (default) */
    struct sockaddr_un un;
 
    server.socket = socket(PF_UNIX, SOCK_STREAM, 0);
@@ -764,6 +796,8 @@ static int vtest_client_dispatch_commands(struct vtest_client *client)
 
    vtest_poll_resource_busy_wait();
    if (header[1] <= 0 || header[1] >= ARRAY_SIZE(vtest_commands)) {
+      fprintf(stderr, "vtest: unknown command ID %u (len=%u)\n",
+              header[1], header[0]);
       return VTEST_CLIENT_ERROR_COMMAND_ID;
    }
 

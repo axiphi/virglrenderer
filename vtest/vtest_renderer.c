@@ -1301,9 +1301,10 @@ static int vtest_create_resource_internal(struct vtest_context *ctx,
 
       ret = vtest_send_fd(ctx->out_fd, fd);
       if (ret < 0) {
-         close(fd);
-         vtest_unref_resource(res);
-         return report_failed_call("vtest_send_fd", ret);
+         /* sendmsg with SCM_RIGHTS failed (e.g. non-Unix socket).
+          * Send a dummy byte so the client protocol stays in sync. */
+         char dummy = 0;
+         (void)write(ctx->out_fd, &dummy, 1);
       }
 
       /* Closing the file descriptor does not unmap the region. */
@@ -2372,6 +2373,13 @@ static int vtest_submit_cmd2_batch(struct vtest_context *ctx,
          int fence_fd = virgl_renderer_get_fence_fd(fence_id);
          if (fence_fd < 0)
             fence_fd = virgl_renderer_export_signalled_fence();
+         if (fence_fd < 0) {
+#ifdef HAVE_EVENTFD_H
+            fence_fd = eventfd(1, EFD_CLOEXEC | EFD_NONBLOCK);
+            if (fence_fd < 0)
+               report_failed_call("eventfd(signalled)", -errno);
+#endif
+         }
          if (batch->flags & VCMD_SUBMIT_CMD2_FLAG_OUT_FENCE_FD)
             vtest_send_fd(ctx->out_fd, fence_fd);
 #ifdef ENABLE_DRM
