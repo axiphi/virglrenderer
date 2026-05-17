@@ -13,6 +13,7 @@
 enum render_backend_type {
    RENDER_BACKEND_NONE = 0,
    RENDER_BACKEND_VENUS,
+   RENDER_BACKEND_NEPTUNE,
 };
 
 struct render_context {

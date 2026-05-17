@@ -302,12 +302,21 @@ static void vtest_server_parse_args(int argc, char **argv)
       }
    } else {
       server.ctx_flags = VIRGL_RENDERER_NO_VIRGL;
+#ifdef ENABLE_NEPTUNE
+      server.ctx_flags |= VIRGL_RENDERER_NEPTUNE;
+#endif
    }
 
    if (server.venus) {
       server.ctx_flags |= VIRGL_RENDERER_VENUS;
       server.ctx_flags |= VIRGL_RENDERER_RENDER_SERVER;
    }
+
+#ifdef ENABLE_NEPTUNE
+   /* Always enable Neptune if built with support, using render server */
+   server.ctx_flags |= VIRGL_RENDERER_NEPTUNE;
+   server.ctx_flags |= VIRGL_RENDERER_RENDER_SERVER;
+#endif
    if (server.drm) {
       server.ctx_flags |= VIRGL_RENDERER_DRM | VIRGL_RENDERER_ASYNC_FENCE_CB;
    }

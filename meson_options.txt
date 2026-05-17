@@ -65,6 +65,13 @@ option(
 )
 
 option(
+  'neptune',
+  type : 'boolean',
+  value : 'false',
+  description : 'enable support for neptune (D3D11/D3D12 virtualization)'
+)
+
+option(
   'check-gl-errors',
   type : 'boolean',
   value : 'true',

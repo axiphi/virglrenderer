@@ -169,6 +169,9 @@ struct virgl_renderer_callbacks {
 /* Blob allocations must be done by guest from dedicated heap (Host visible memory). */
 #define VIRGL_RENDERER_USE_GUEST_VRAM (1 << 14)
 
+/* Enable Neptune renderer (D3D11/D3D12 virtualization). */
+#define VIRGL_RENDERER_NEPTUNE       (1 << 15)
+
 VIRGL_EXPORT int virgl_renderer_init(void *cookie, int flags, struct virgl_renderer_callbacks *cb);
 VIRGL_EXPORT void virgl_renderer_poll(void); /* force fences */
 

@@ -117,3 +117,28 @@ endif
 if with_fuzzer
    subdir('fuzzer')
 endif
+
+if with_neptune
+   neptune_test_depends = [
+      libvirglrenderer_dep,
+   ]
+
+   neptune_test_inc = include_directories('../src')
+
+   neptune_tests = [
+      ['test_neptune_init', 'test_neptune_init.c'],
+   ]
+
+   # Neptune init forks the render server, so point at the in-tree
+   # binary instead of the install-prefix path baked into config.h.
+   neptune_test_env = environment()
+   neptune_test_env.set('RENDER_SERVER_EXEC_PATH',
+                        virgl_render_server.full_path())
+
+   foreach t : neptune_tests
+      exe = executable(t[0], t[1],
+                       include_directories : neptune_test_inc,
+                       dependencies : neptune_test_depends)
+      test(t[0], exe, env : neptune_test_env)
+   endforeach
+endif

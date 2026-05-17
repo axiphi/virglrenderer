@@ -103,6 +103,29 @@ venus_codegen = custom_target(
    command : [prog_python, '@INPUT0@', '-o', '@OUTDIR@', '@INPUT1@'],
 )
 
+neptune_sources = [
+   'neptune/npt_common.c',
+   'neptune/npt_context.c',
+   'neptune/npt_cs.c',
+   'neptune/npt_feedback.c',
+   'neptune/npt_event.c',
+   'neptune/npt_library.c',
+   'neptune/npt_profile.c',
+   'neptune/npt_overrides_d3d11_fence.c',
+   'neptune/npt_overrides_d3d11_query.c',
+   'neptune/npt_queue.c',
+   'neptune/npt_renderer.c',
+   'neptune/npt_resource.c',
+   'neptune/npt_ring.c',
+   'neptune/npt_swapchain.c',
+   'neptune/npt_swapchain_dmabuf.c',
+   'neptune/npt_dispatch.c',
+   'neptune/npt_overrides_toplevel.c',
+   'neptune/npt_overrides_dxgi_factory.c',
+   'neptune/npt_overrides_dxgi_swapchain.c',
+   'neptune/npt_overrides_shared_handle.c',
+]
+
 drm_sources = [
    'drm/drm_context.c',
    'drm/drm_fence.c',
@@ -205,6 +228,21 @@ if with_venus
    endif
 endif
 
+if with_neptune
+   virgl_sources += neptune_sources
+   # Headers only -- Neptune dlopens the d3d11/dxgi libraries at runtime,
+   # so the renderer must not gain a NEEDED entry on libdxvk_*.
+   dxvk_dep = dependency('dxvk-dxgi').partial_dependency(
+      compile_args : true, includes : true)
+   # The dmabuf headless contract is a fork-only extension; bail early
+   # rather than fail to compile a Neptune source file.
+   if not cc.has_header('dxvk_dmabuf.h', dependencies : dxvk_dep)
+      error('Neptune requires the dxvk with dmabuf-presenter; ' +
+            'dxvk_dmabuf.h not found via dxvk-dxgi pkg-config.')
+   endif
+   virgl_depends += [dxvk_dep]
+endif
+
 if with_drm_renderers
    virgl_sources += drm_sources
 endif
@@ -246,7 +284,7 @@ endif
 libvirgl = static_library(
    'virgl',
    virgl_sources,
-   include_directories: [inc_gallium, inc_configuration, 'venus', 'drm'],
+   include_directories: [inc_gallium, inc_configuration, 'venus', 'drm', 'neptune'],
    dependencies : [virgl_depends, drm_uapi_dep],
    objc_args : ['-fno-objc-arc'],
 )
@@ -254,7 +292,7 @@ libvirgl = static_library(
 libvirgl_inc = [
    inc_gallium,
    inc_configuration,
-   include_directories(['.', 'venus', 'drm'])
+   include_directories(['.', 'venus', 'drm', 'neptune'])
 ]
 
 libvirgl_dep = declare_dependency(
