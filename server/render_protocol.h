@@ -199,6 +199,10 @@ struct render_context_op_submit_cmd_request {
  * current sequence number of the ring in the shmem is updated.
  *
  * This roughly corresponds to virgl_renderer_context_create_fence.
+ *
+ * The reply may carry a sync_file fd via SCM_RIGHTS, indicated by
+ * `has_fd`.  When present, the fd represents the fence registered for
+ * `seqno` and the receiver takes ownership.
  */
 struct render_context_op_submit_fence_request {
    struct render_context_op_header header;
@@ -206,6 +210,12 @@ struct render_context_op_submit_fence_request {
    /* TODO fix virgl_renderer_context_create_fence to use ring_index */
    uint32_t ring_index;
    uint32_t seqno;
+};
+
+struct render_context_op_submit_fence_reply {
+   bool ok;
+   bool has_fd;       /* if true, one fd follows via SCM_RIGHTS */
+   uint16_t pad;
 };
 
 union render_context_op_request {

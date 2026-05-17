@@ -12,6 +12,7 @@
 #endif
 
 #include "render_context.h"
+#include "virgl_fence.h"
 #include "virtgpu_drm.h"
 
 #ifdef ENABLE_VENUS
@@ -146,6 +147,7 @@ render_state_fini(void)
 #ifdef ENABLE_VENUS
          vkr_renderer_fini();
 #endif
+         virgl_fence_table_cleanup();
       }
    }
 }
@@ -167,13 +169,17 @@ render_state_init(uint32_t init_flags)
 
    SCOPE_LOCK_STATE();
    if (!state.init_count) {
+      if (virgl_fence_table_init())
+         return false;
 #ifdef ENABLE_VENUS
       if (want_venus) {
          /* always use sync thread and async fence cb for low latency */
          static const uint32_t vkr_flags =
             VKR_RENDERER_THREAD_SYNC | VKR_RENDERER_ASYNC_FENCE_CB;
-         if (!vkr_renderer_init(vkr_flags, &render_state_vkr_cbs))
+         if (!vkr_renderer_init(vkr_flags, &render_state_vkr_cbs)) {
+            virgl_fence_table_cleanup();
             return false;
+         }
       }
 #endif
       list_inithead(&state.contexts);
