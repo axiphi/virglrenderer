@@ -33,6 +33,8 @@ vtest_sources = [
    'vtest.h'
 ]
 
+rt_dep = cc.find_library('rt', required : false)
+
 vtest_depends = [
    libvirglrenderer_dep,
    gallium_dep,
@@ -40,6 +42,7 @@ vtest_depends = [
    libdrm_dep,
    drm_uapi_dep,
    mesa_dep,
+   rt_dep,
 ]
 
 if with_tracing == 'percetto'

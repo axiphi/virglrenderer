@@ -10,7 +10,14 @@
 #include "proxy_client.h"
 #include "proxy_renderer.h"
 #include "proxy_server.h"
+
+#ifdef ENABLE_VENUS
 #include "vkr_renderer.h"
+#endif
+
+#ifdef ENABLE_NEPTUNE
+#include "npt_renderer.h"
+#endif
 
 int
 proxy_renderer_init(const struct proxy_renderer_cbs *cbs, uint32_t flags)
@@ -58,8 +65,14 @@ size_t
 proxy_get_capset(uint32_t set, void *caps)
 {
    switch (set) {
+#ifdef ENABLE_VENUS
    case VIRTGPU_DRM_CAPSET_VENUS:
       return vkr_get_capset(caps, proxy_renderer.flags);
+#endif
+#ifdef ENABLE_NEPTUNE
+   case VIRTGPU_DRM_CAPSET_NEPTUNE:
+      return npt_get_capset(caps, proxy_renderer.flags);
+#endif
    default:
       break;
    }

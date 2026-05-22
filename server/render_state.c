@@ -12,11 +12,20 @@
 #endif
 
 #include "render_context.h"
-#include "vkr_renderer.h"
+#include "virgl_fence.h"
+#include "virtgpu_drm.h"
 
-/* Workers call into vkr renderer.  When they are processes, not much care is
- * required. But when workers are threads, we need to grab a lock to protect
- * vkr renderer.
+#ifdef ENABLE_VENUS
+#include "vkr_renderer.h"
+#endif
+
+#ifdef ENABLE_NEPTUNE
+#include "npt_renderer.h"
+#endif
+
+/* Workers call into the renderer backend.  When they are processes, not much
+ * care is required. But when workers are threads, we need to grab a lock to
+ * protect the renderer.
  */
 struct render_state {
 #ifdef ENABLE_RENDER_SERVER_WORKER_THREAD
@@ -111,10 +120,19 @@ render_state_cb_retire_fence(uint32_t ctx_id, uint32_t ring_idx, uint64_t fence_
    render_context_update_timeline(ctx, ring_idx, seqno);
 }
 
-static const struct vkr_renderer_callbacks render_state_cbs = {
+#ifdef ENABLE_VENUS
+static const struct vkr_renderer_callbacks render_state_vkr_cbs = {
    .debug_logger = render_state_cb_debug_logger,
    .retire_fence = render_state_cb_retire_fence,
 };
+#endif
+
+#ifdef ENABLE_NEPTUNE
+static const struct npt_renderer_callbacks render_state_npt_cbs = {
+   .debug_logger = render_state_cb_debug_logger,
+   .retire_fence = render_state_cb_retire_fence,
+};
+#endif
 
 static void
 render_state_add_context(struct render_context *ctx)
@@ -136,26 +154,65 @@ render_state_fini(void)
    SCOPE_LOCK_STATE();
    if (state.init_count) {
       state.init_count--;
-      if (!state.init_count)
+      if (!state.init_count) {
+#ifdef ENABLE_VENUS
          vkr_renderer_fini();
+#endif
+#ifdef ENABLE_NEPTUNE
+         npt_renderer_fini();
+#endif
+         virgl_fence_table_cleanup();
+      }
    }
 }
 
 bool
 render_state_init(uint32_t init_flags)
 {
-   static const uint32_t required_flags = VIRGL_RENDERER_VENUS | VIRGL_RENDERER_NO_VIRGL;
-   if ((init_flags & required_flags) != required_flags)
+   if (!(init_flags & VIRGL_RENDERER_NO_VIRGL))
+      return false;
+
+#ifdef ENABLE_VENUS
+   bool want_venus = !!(init_flags & VIRGL_RENDERER_VENUS);
+#else
+   bool want_venus = false;
+#endif
+#ifdef ENABLE_NEPTUNE
+   bool want_neptune = !!(init_flags & VIRGL_RENDERER_NEPTUNE);
+#else
+   bool want_neptune = false;
+#endif
+
+   if (!want_venus && !want_neptune)
       return false;
 
    SCOPE_LOCK_STATE();
    if (!state.init_count) {
-      /* always use sync thread and async fence cb for low latency */
-      static const uint32_t vkr_flags =
-         VKR_RENDERER_THREAD_SYNC | VKR_RENDERER_ASYNC_FENCE_CB;
-      if (!vkr_renderer_init(vkr_flags, &render_state_cbs))
+      if (virgl_fence_table_init())
          return false;
-
+#ifdef ENABLE_VENUS
+      if (want_venus) {
+         /* always use sync thread and async fence cb for low latency */
+         static const uint32_t vkr_flags =
+            VKR_RENDERER_THREAD_SYNC | VKR_RENDERER_ASYNC_FENCE_CB;
+         if (!vkr_renderer_init(vkr_flags, &render_state_vkr_cbs)) {
+            virgl_fence_table_cleanup();
+            return false;
+         }
+      }
+#endif
+#ifdef ENABLE_NEPTUNE
+      if (want_neptune) {
+         if (!npt_renderer_init(0, &render_state_npt_cbs)) {
+#ifdef ENABLE_VENUS
+            if (want_venus)
+               vkr_renderer_fini();
+#endif
+            virgl_fence_table_cleanup();
+            return false;
+         }
+      }
+#endif
       list_inithead(&state.contexts);
    }
 
@@ -170,9 +227,31 @@ render_state_create_context(struct render_context *ctx,
                             uint32_t name_len,
                             const char *name)
 {
+   uint32_t capset_id = flags & VIRGL_RENDERER_CONTEXT_FLAG_CAPSET_ID_MASK;
+   bool ok = false;
+
    {
       SCOPE_LOCK_RENDERER();
-      if (!vkr_renderer_create_context(ctx->ctx_id, flags, name_len, name))
+      switch (capset_id) {
+#ifdef ENABLE_VENUS
+      case VIRTGPU_DRM_CAPSET_VENUS:
+         ok = vkr_renderer_create_context(ctx->ctx_id, flags, name_len, name);
+         if (ok)
+            ctx->backend = RENDER_BACKEND_VENUS;
+         break;
+#endif
+#ifdef ENABLE_NEPTUNE
+      case VIRTGPU_DRM_CAPSET_NEPTUNE:
+         ok = npt_renderer_create_context(ctx->ctx_id, flags, name_len, name);
+         if (ok)
+            ctx->backend = RENDER_BACKEND_NEPTUNE;
+         break;
+#endif
+      default:
+         render_log("unsupported capset_id %d", capset_id);
+         return false;
+      }
+      if (!ok)
          return false;
    }
 
@@ -190,7 +269,20 @@ render_state_destroy_context(uint32_t ctx_id)
 
    {
       SCOPE_LOCK_RENDERER();
-      vkr_renderer_destroy_context(ctx_id);
+      switch (ctx->backend) {
+#ifdef ENABLE_VENUS
+      case RENDER_BACKEND_VENUS:
+         vkr_renderer_destroy_context(ctx_id);
+         break;
+#endif
+#ifdef ENABLE_NEPTUNE
+      case RENDER_BACKEND_NEPTUNE:
+         npt_renderer_destroy_context(ctx_id);
+         break;
+#endif
+      default:
+         break;
+      }
    }
 
    render_state_remove_context(ctx);
@@ -199,8 +291,23 @@ render_state_destroy_context(uint32_t ctx_id)
 bool
 render_state_submit_cmd(uint32_t ctx_id, void *cmd, uint32_t size)
 {
+   struct render_context *ctx = render_state_lookup_context(ctx_id);
+   if (!ctx)
+      return false;
+
    SCOPE_LOCK_RENDERER();
-   return vkr_renderer_submit_cmd(ctx_id, cmd, size);
+   switch (ctx->backend) {
+#ifdef ENABLE_VENUS
+   case RENDER_BACKEND_VENUS:
+      return vkr_renderer_submit_cmd(ctx_id, cmd, size);
+#endif
+#ifdef ENABLE_NEPTUNE
+   case RENDER_BACKEND_NEPTUNE:
+      return npt_renderer_submit_cmd(ctx_id, cmd, size);
+#endif
+   default:
+      return false;
+   }
 }
 
 bool
@@ -209,8 +316,23 @@ render_state_submit_fence(uint32_t ctx_id,
                           uint64_t ring_idx,
                           uint64_t fence_id)
 {
+   struct render_context *ctx = render_state_lookup_context(ctx_id);
+   if (!ctx)
+      return false;
+
    SCOPE_LOCK_RENDERER();
-   return vkr_renderer_submit_fence(ctx_id, flags, ring_idx, fence_id);
+   switch (ctx->backend) {
+#ifdef ENABLE_VENUS
+   case RENDER_BACKEND_VENUS:
+      return vkr_renderer_submit_fence(ctx_id, flags, ring_idx, fence_id);
+#endif
+#ifdef ENABLE_NEPTUNE
+   case RENDER_BACKEND_NEPTUNE:
+      return npt_renderer_submit_fence(ctx_id, flags, ring_idx, fence_id);
+#endif
+   default:
+      return false;
+   }
 }
 
 bool
@@ -224,10 +346,27 @@ render_state_create_resource(uint32_t ctx_id,
                              uint32_t *out_map_info,
                              struct virgl_resource_vulkan_info *out_vulkan_info)
 {
+   struct render_context *ctx = render_state_lookup_context(ctx_id);
+   if (!ctx)
+      return false;
+
    SCOPE_LOCK_RENDERER();
-   return vkr_renderer_create_resource(ctx_id, res_id, blob_id, blob_size, blob_flags,
-                                       out_fd_type, out_res_fd, out_map_info,
-                                       out_vulkan_info);
+   switch (ctx->backend) {
+#ifdef ENABLE_VENUS
+   case RENDER_BACKEND_VENUS:
+      return vkr_renderer_create_resource(ctx_id, res_id, blob_id, blob_size, blob_flags,
+                                          out_fd_type, out_res_fd, out_map_info,
+                                          out_vulkan_info);
+#endif
+#ifdef ENABLE_NEPTUNE
+   case RENDER_BACKEND_NEPTUNE:
+      return npt_renderer_create_resource(ctx_id, res_id, blob_id, blob_size,
+                                          blob_flags, out_fd_type, out_res_fd,
+                                          out_map_info);
+#endif
+   default:
+      return false;
+   }
 }
 
 bool
@@ -237,13 +376,45 @@ render_state_import_resource(uint32_t ctx_id,
                              int fd,
                              uint64_t size)
 {
+   struct render_context *ctx = render_state_lookup_context(ctx_id);
+   if (!ctx)
+      return false;
+
    SCOPE_LOCK_RENDERER();
-   return vkr_renderer_import_resource(ctx_id, res_id, fd_type, fd, size);
+   switch (ctx->backend) {
+#ifdef ENABLE_VENUS
+   case RENDER_BACKEND_VENUS:
+      return vkr_renderer_import_resource(ctx_id, res_id, fd_type, fd, size);
+#endif
+#ifdef ENABLE_NEPTUNE
+   case RENDER_BACKEND_NEPTUNE:
+      return npt_renderer_import_resource(ctx_id, res_id, fd_type, fd, size);
+#endif
+   default:
+      return false;
+   }
 }
 
 void
 render_state_destroy_resource(uint32_t ctx_id, uint32_t res_id)
 {
+   struct render_context *ctx = render_state_lookup_context(ctx_id);
+   if (!ctx)
+      return;
+
    SCOPE_LOCK_RENDERER();
-   vkr_renderer_destroy_resource(ctx_id, res_id);
+   switch (ctx->backend) {
+#ifdef ENABLE_VENUS
+   case RENDER_BACKEND_VENUS:
+      vkr_renderer_destroy_resource(ctx_id, res_id);
+      break;
+#endif
+#ifdef ENABLE_NEPTUNE
+   case RENDER_BACKEND_NEPTUNE:
+      npt_renderer_destroy_resource(ctx_id, res_id);
+      break;
+#endif
+   default:
+      break;
+   }
 }

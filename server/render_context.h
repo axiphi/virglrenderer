@@ -10,6 +10,12 @@
 
 #include <stdatomic.h>
 
+enum render_backend_type {
+   RENDER_BACKEND_NONE = 0,
+   RENDER_BACKEND_VENUS,
+   RENDER_BACKEND_NEPTUNE,
+};
+
 struct render_context {
    uint32_t ctx_id;
    struct render_socket socket;
@@ -24,6 +30,8 @@ struct render_context {
    atomic_uint *shmem_timelines;
 
    int timeline_count;
+
+   enum render_backend_type backend;
 
    /* optional */
    int fence_eventfd;

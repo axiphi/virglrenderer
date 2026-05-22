@@ -9,6 +9,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "virgl_resource.h"
+
 struct iovec;
 struct virgl_context;
 

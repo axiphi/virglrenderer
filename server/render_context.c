@@ -6,11 +6,14 @@
 #include "render_context.h"
 
 #include <sys/mman.h>
+#include <unistd.h>
 
 #include "util/u_thread.h"
 #include "virgl_util.h"
 
+#include "render_socket.h"
 #include "render_state.h"
+#include "virgl_fence.h"
 
 void
 render_context_update_timeline(struct render_context *ctx,
@@ -34,8 +37,29 @@ render_context_dispatch_submit_fence(struct render_context *ctx,
    /* always merge fences */
    assert(!(req->flags & ~VIRGL_RENDERER_FENCE_FLAG_MERGEABLE));
    assert(req->ring_index < (uint32_t)ctx->timeline_count);
-   return render_state_submit_fence(ctx->ctx_id, VIRGL_RENDERER_FENCE_FLAG_MERGEABLE,
-                                    req->ring_index, req->seqno);
+
+   bool ok = render_state_submit_fence(ctx->ctx_id,
+                                        VIRGL_RENDERER_FENCE_FLAG_MERGEABLE,
+                                        req->ring_index, req->seqno);
+
+   int fence_fd = ok ? virgl_fence_get_fd(req->seqno) : -1;
+
+   struct render_context_op_submit_fence_reply reply = {
+      .ok = ok,
+      .has_fd = (fence_fd >= 0),
+      .pad = 0,
+   };
+
+   bool sent;
+   if (fence_fd >= 0) {
+      sent = render_socket_send_reply_with_fds(&ctx->socket, &reply,
+                                                sizeof(reply), &fence_fd, 1);
+      close(fence_fd);
+   } else {
+      sent = render_socket_send_reply(&ctx->socket, &reply, sizeof(reply));
+   }
+
+   return sent;
 }
 
 static bool

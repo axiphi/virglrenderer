@@ -30,10 +30,11 @@
 #include <errno.h>
 #include <fcntl.h>
 
+#include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
-static int memfd_create(const char *name, unsigned int flags)
+static int vtest_memfd_create(const char *name, unsigned int flags)
 {
 #ifdef __NR_memfd_create
     return syscall(__NR_memfd_create, name, flags);
@@ -47,15 +48,12 @@ static int memfd_create(const char *name, unsigned int flags)
 int vtest_new_shm(uint32_t handle, size_t size)
 {
    int fd, ret;
-   int length = snprintf(NULL, 0, "vtest-res-%u", handle);
-   char *str = malloc(length + 1);
-   snprintf(str, length + 1, "vtest-res-%u", handle);
+   char name[32];
 
-   fd = memfd_create(str, MFD_ALLOW_SEALING);
-   free(str);
-   if (fd < 0) {
+   snprintf(name, sizeof(name), "vtest-res-%u", handle);
+   fd = vtest_memfd_create(name, MFD_ALLOW_SEALING);
+   if (fd < 0)
       return report_failed_call("memfd_create", -errno);
-   }
 
    ret = ftruncate(fd, size);
    if (ret < 0) {
@@ -68,7 +66,7 @@ int vtest_new_shm(uint32_t handle, size_t size)
 
 int vtest_shm_check(void)
 {
-    int mfd = memfd_create("test", MFD_ALLOW_SEALING);
+    int mfd = vtest_memfd_create("test", MFD_ALLOW_SEALING);
 
     if (mfd >= 0) {
         close(mfd);
@@ -77,4 +75,3 @@ int vtest_shm_check(void)
 
     return 0;
 }
-

@@ -1301,9 +1301,10 @@ static int vtest_create_resource_internal(struct vtest_context *ctx,
 
       ret = vtest_send_fd(ctx->out_fd, fd);
       if (ret < 0) {
-         close(fd);
-         vtest_unref_resource(res);
-         return report_failed_call("vtest_send_fd", ret);
+         /* sendmsg with SCM_RIGHTS failed (e.g. non-Unix socket).
+          * Send a dummy byte so the client protocol stays in sync. */
+         char dummy = 0;
+         (void)write(ctx->out_fd, &dummy, 1);
       }
 
       /* Closing the file descriptor does not unmap the region. */
@@ -1405,18 +1406,24 @@ int vtest_resource_create_blob(UNUSED uint32_t length_dw)
    }
 
    /* export blob */
-   if (args.blob_mem == VIRGL_RENDERER_BLOB_MEM_HOST3D) {
+   {
       uint32_t fd_type;
-      ret = virgl_renderer_resource_export_blob(res->res_id, &fd_type, &fd);
-      if (ret) {
+      int export_fd;
+      ret = virgl_renderer_resource_export_blob(res->res_id, &fd_type, &export_fd);
+      if (!ret &&
+          (fd_type == VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF ||
+           fd_type == VIRGL_RENDERER_BLOB_FD_TYPE_SHM)) {
+         /* Use the exported fd (e.g. render-server SHM) instead of vtest's */
+         if (fd >= 0)
+            close(fd);
+         fd = export_fd;
+      } else if (args.blob_mem == VIRGL_RENDERER_BLOB_MEM_HOST3D) {
+         /* HOST3D must always export successfully */
+         if (!ret)
+            close(export_fd);
          vtest_unref_resource(res);
-         return report_failed_call("virgl_renderer_resource_export_blob", ret);
-      }
-      if (fd_type != VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF &&
-          fd_type != VIRGL_RENDERER_BLOB_FD_TYPE_SHM) {
-         close(fd);
-         vtest_unref_resource(res);
-         return report_failed_call("virgl_renderer_resource_export_blob", -EINVAL);
+         return report_failed_call("virgl_renderer_resource_export_blob",
+                                   ret ? ret : -EINVAL);
       }
    }
 
@@ -2372,6 +2379,13 @@ static int vtest_submit_cmd2_batch(struct vtest_context *ctx,
          int fence_fd = virgl_renderer_get_fence_fd(fence_id);
          if (fence_fd < 0)
             fence_fd = virgl_renderer_export_signalled_fence();
+         if (fence_fd < 0) {
+#ifdef HAVE_EVENTFD_H
+            fence_fd = eventfd(1, EFD_CLOEXEC | EFD_NONBLOCK);
+            if (fence_fd < 0)
+               report_failed_call("eventfd(signalled)", -errno);
+#endif
+         }
          if (batch->flags & VCMD_SUBMIT_CMD2_FLAG_OUT_FENCE_FD)
             vtest_send_fd(ctx->out_fd, fence_fd);
 #ifdef ENABLE_DRM

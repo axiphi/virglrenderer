@@ -346,7 +346,8 @@ if with_check_gl_errors
 endif
 
 with_venus = get_option('venus')
-with_render_server = with_venus
+with_neptune = get_option('neptune')
+with_render_server = with_venus or with_neptune
 with_render_server_worker = get_option('render-server-worker')
 render_server_install_dir = get_option('prefix') / get_option('libexecdir')
 if with_venus and with_host_darwin
@@ -364,14 +365,6 @@ if with_venus
       venus_dep += dependency('vulkan')
    endif
 
-   if host_machine.system() in ['freebsd', 'openbsd']
-      # When building for FreeBSD, epoll(7) is provided by a userspace
-      # wrapper around kqueue(2).
-      epoll_dep = dependency('epoll-shim')
-   else
-      epoll_dep = []
-   endif
-
    if with_host_darwin
       venus_dep += declare_dependency(
          compile_args : ['-DVK_USE_PLATFORM_METAL_EXT', '-DVK_ENABLE_BETA_EXTENSIONS'],
@@ -383,6 +376,25 @@ if with_venus
    endif
 
    conf_data.set('ENABLE_VENUS', 1)
+
+   if get_option('vulkan-preload')
+      conf_data.set('ENABLE_VULKAN_PRELOAD', 1)
+   endif
+endif
+
+if with_neptune
+   conf_data.set('ENABLE_NEPTUNE', 1)
+endif
+
+if with_render_server
+   if host_machine.system() in ['freebsd', 'openbsd']
+      # When building for FreeBSD, epoll(7) is provided by a userspace
+      # wrapper around kqueue(2).
+      epoll_dep = dependency('epoll-shim')
+   else
+      epoll_dep = []
+   endif
+
    conf_data.set('ENABLE_RENDER_SERVER', 1)
    conf_data.set('RENDER_SERVER_EXEC_PATH',
                  '"' + render_server_install_dir / 'virgl_render_server' + '"')
@@ -393,10 +405,6 @@ if with_venus
       meson.add_devenv(devenv)
    else
       warning('set RENDER_SERVER_EXEC_PATH env if not install')
-   endif
-
-   if get_option('vulkan-preload')
-      conf_data.set('ENABLE_VULKAN_PRELOAD', 1)
    endif
 
    if with_render_server_worker == 'process'
@@ -460,7 +468,9 @@ subdir('server')
 endif
 
 if with_tests
-   assert(have_egl, 'Tests require EGL, but it is not available')
+   if not have_egl
+      assert(with_neptune, 'Tests require EGL or Neptune')
+   endif
    subdir('tests')
 endif
 
@@ -472,6 +482,7 @@ summary({'c_args': (' ').join(get_option('c_args')),
         'glx': have_glx,
         'gbm': gbm_dep.found(),
         'venus': with_venus,
+        'neptune': with_neptune,
         'drm-amdgpu': with_drm_amdgpu,
         'drm-asahi': with_drm_asahi,
         'drm-i915': with_drm_i915,
