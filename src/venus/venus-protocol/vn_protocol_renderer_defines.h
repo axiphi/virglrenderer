@@ -465,7 +465,9 @@ typedef enum VkCommandTypeEXT {
     VK_COMMAND_TYPE_vkCmdSetAttachmentFeedbackLoopEnableEXT_EXT = 329,
     VK_COMMAND_TYPE_vkCmdSetDepthClampRangeEXT_EXT = 330,
     VK_COMMAND_TYPE_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR_EXT = 331,
+    VK_COMMAND_TYPE_vkGetMemoryMetalHandleEXT_EXT = 331,
     VK_COMMAND_TYPE_vkCmdDrawMeshTasksEXT_EXT = 332,
+    VK_COMMAND_TYPE_vkGetMemoryMetalHandlePropertiesEXT_EXT = 332,
     VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectEXT_EXT = 333,
     VK_COMMAND_TYPE_vkCmdDrawMeshTasksIndirectCountEXT_EXT = 334,
     VK_COMMAND_TYPE_vkWriteSamplerDescriptorMESA_EXT = 335,
@@ -2880,6 +2882,27 @@ struct vn_command_vkCmdSetDepthClampRangeEXT {
     const VkDepthClampRangeEXT* pDepthClampRange;
 };
 
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+struct vn_command_vkGetMemoryMetalHandleEXT {
+    VkDevice device;
+    const VkMemoryGetMetalHandleInfoEXT* pGetMetalHandleInfo;
+    void** pHandle;
+
+    VkResult ret;
+};
+
+#endif
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+struct vn_command_vkGetMemoryMetalHandlePropertiesEXT {
+    VkDevice device;
+    VkExternalMemoryHandleTypeFlagBits handleType;
+    const void* pHandle;
+    VkMemoryMetalHandlePropertiesEXT* pMemoryMetalHandleProperties;
+
+    VkResult ret;
+};
+
+#endif
 struct vn_command_vkWriteSamplerDescriptorsEXT {
     VkDevice device;
     uint32_t samplerCount;
@@ -3377,6 +3400,12 @@ struct vn_dispatch_context {
     void (*dispatch_vkCmdSetRenderingAttachmentLocations)(struct vn_dispatch_context *ctx, struct vn_command_vkCmdSetRenderingAttachmentLocations *args);
     void (*dispatch_vkCmdSetRenderingInputAttachmentIndices)(struct vn_dispatch_context *ctx, struct vn_command_vkCmdSetRenderingInputAttachmentIndices *args);
     void (*dispatch_vkCmdSetDepthClampRangeEXT)(struct vn_dispatch_context *ctx, struct vn_command_vkCmdSetDepthClampRangeEXT *args);
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+    void (*dispatch_vkGetMemoryMetalHandleEXT)(struct vn_dispatch_context *ctx, struct vn_command_vkGetMemoryMetalHandleEXT *args);
+#endif
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+    void (*dispatch_vkGetMemoryMetalHandlePropertiesEXT)(struct vn_dispatch_context *ctx, struct vn_command_vkGetMemoryMetalHandlePropertiesEXT *args);
+#endif
     void (*dispatch_vkWriteSamplerDescriptorsEXT)(struct vn_dispatch_context *ctx, struct vn_command_vkWriteSamplerDescriptorsEXT *args);
     void (*dispatch_vkWriteResourceDescriptorsEXT)(struct vn_dispatch_context *ctx, struct vn_command_vkWriteResourceDescriptorsEXT *args);
     void (*dispatch_vkCmdBindSamplerHeapEXT)(struct vn_dispatch_context *ctx, struct vn_command_vkCmdBindSamplerHeapEXT *args);

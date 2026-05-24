@@ -305,6 +305,12 @@ struct vn_device_proc_table {
    PFN_vkGetImageSubresourceLayout2 GetImageSubresourceLayout2;
    PFN_vkGetMemoryFdKHR GetMemoryFdKHR;
    PFN_vkGetMemoryFdPropertiesKHR GetMemoryFdPropertiesKHR;
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+   PFN_vkGetMemoryMetalHandleEXT GetMemoryMetalHandleEXT;
+#endif
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+   PFN_vkGetMemoryMetalHandlePropertiesEXT GetMemoryMetalHandlePropertiesEXT;
+#endif
    PFN_vkGetPipelineCacheData GetPipelineCacheData;
    PFN_vkGetPrivateData GetPrivateData;
    PFN_vkGetQueryPoolResults GetQueryPoolResults;
@@ -1065,6 +1071,16 @@ vn_util_init_device_proc_table(VkDevice dev,
    proc_table->GetMemoryFdPropertiesKHR =
       ext_table->KHR_external_memory_fd ? VN_GDPA(dev, vkGetMemoryFdPropertiesKHR) :
       NULL;
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+   proc_table->GetMemoryMetalHandleEXT =
+      ext_table->EXT_external_memory_metal ? VN_GDPA(dev, vkGetMemoryMetalHandleEXT) :
+      NULL;
+#endif
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+   proc_table->GetMemoryMetalHandlePropertiesEXT =
+      ext_table->EXT_external_memory_metal ? VN_GDPA(dev, vkGetMemoryMetalHandlePropertiesEXT) :
+      NULL;
+#endif
    proc_table->GetPipelineCacheData = VN_GDPA(dev, vkGetPipelineCacheData);
    proc_table->GetPrivateData =
       api_version >= VK_API_VERSION_1_3 ? VN_GDPA(dev, vkGetPrivateData) :

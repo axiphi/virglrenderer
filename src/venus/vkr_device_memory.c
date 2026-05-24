@@ -50,6 +50,33 @@ vkr_get_fd_info_from_resource_info(struct vkr_context *ctx,
    return true;
 }
 
+#ifdef VK_EXT_external_memory_metal
+static bool
+vkr_get_metal_info_from_resource_info(struct vkr_context *ctx,
+                                      const VkImportMemoryResourceInfoMESA *res_info,
+                                      VkImportMemoryMetalHandleInfoEXT *out)
+{
+   struct vkr_resource *res = vkr_context_get_resource(ctx, res_info->resourceId);
+   if (!res) {
+      vkr_log("failed to import resource: invalid res_id %u", res_info->resourceId);
+      vkr_context_set_fatal(ctx);
+      return false;
+   }
+
+   if (res->fd_type != VIRGL_RESOURCE_METAL_HEAP) {
+      return false;
+   }
+
+   *out = (VkImportMemoryMetalHandleInfoEXT){
+      .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_METAL_HANDLE_INFO_EXT,
+      .pNext = res_info->pNext,
+      .handle = res->u.metal_heap,
+      .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT,
+   };
+   return true;
+}
+#endif
+
 #if defined(HAVE_LINUX_UDMABUF_H) && defined(HAVE_MEMFD_CREATE)
 #include <fcntl.h>
 #include <linux/udmabuf.h>
@@ -262,17 +289,29 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
 
    /* translate VkImportMemoryResourceInfoMESA into VkImportMemoryFdInfoKHR in place */
    VkImportMemoryFdInfoKHR local_import_info = { .fd = -1 };
+#ifdef VK_EXT_external_memory_metal
+   VkImportMemoryMetalHandleInfoEXT local_metal_import_info = { 0 };
+#endif
    VkImportMemoryResourceInfoMESA *res_info = NULL;
    VkBaseInStructure *prev_of_res_info = vkr_find_prev_struct(
       alloc_info, VK_STRUCTURE_TYPE_IMPORT_MEMORY_RESOURCE_INFO_MESA);
    if (prev_of_res_info) {
       res_info = (VkImportMemoryResourceInfoMESA *)prev_of_res_info->pNext;
       if (!vkr_get_fd_info_from_resource_info(ctx, res_info, &local_import_info)) {
+#ifdef VK_EXT_external_memory_metal
+         if (!vkr_get_metal_info_from_resource_info(ctx, res_info, &local_metal_import_info)) {
+            args->ret = VK_ERROR_INVALID_EXTERNAL_HANDLE;
+            return;
+         } else {
+            prev_of_res_info->pNext = (const struct VkBaseInStructure *)&local_metal_import_info;
+         }
+#else
          args->ret = VK_ERROR_INVALID_EXTERNAL_HANDLE;
          return;
+#endif
+      } else {
+         prev_of_res_info->pNext = (const struct VkBaseInStructure *)&local_import_info;
       }
-
-      prev_of_res_info->pNext = (const struct VkBaseInStructure *)&local_import_info;
    }
 
    VkExportMemoryAllocateInfo *export_info =
@@ -307,6 +346,7 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
    };
 
    if ((property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
+       !physical_dev->is_metal_export_supported &&
        physical_dev->EXT_external_memory_metal && !res_info) {
       assert(!res_info);
       mtl_shm = vkr_mtl_shm_alloc(dev->mtl_device, alloc_info->allocationSize);
@@ -400,6 +440,18 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
 
          alloc_info->pNext = &local_import_info;
          valid_fd_types = 1 << VIRGL_RESOURCE_FD_DMABUF;
+      } else if (physical_dev->is_metal_export_supported) {
+         /* Align to 4KiB, which is what Linux expects */
+         alloc_info->allocationSize = align(alloc_info->allocationSize, 0x1000);
+         if (!export_info) {
+            local_export_info = (const VkExportMemoryAllocateInfo){
+               .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
+               .pNext = alloc_info->pNext,
+               .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT,
+            };
+            export_info = &local_export_info;
+            alloc_info->pNext = &local_export_info;
+         }
       }
    }
 
@@ -408,6 +460,8 @@ vkr_dispatch_vkAllocateMemory(struct vn_dispatch_context *dispatch,
          valid_fd_types |= 1 << VIRGL_RESOURCE_FD_OPAQUE;
       if (export_info->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT)
          valid_fd_types |= 1 << VIRGL_RESOURCE_FD_DMABUF;
+      if (export_info->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT)
+         valid_fd_types |= 1 << VIRGL_RESOURCE_METAL_HEAP;
    }
 
    struct vkr_device_memory *mem = vkr_device_memory_create_and_add(ctx, args);
@@ -485,25 +539,42 @@ vkr_dispatch_vkGetMemoryResourcePropertiesMESA(
       return;
    }
 
-   if (res->fd_type != VIRGL_RESOURCE_FD_DMABUF) {
+   uint32_t memoryTypeBits;
+   vn_replace_vkGetMemoryResourcePropertiesMESA_args_handle(args);
+   if (res->fd_type == VIRGL_RESOURCE_FD_DMABUF) {
+      static const VkExternalMemoryHandleTypeFlagBits handle_type =
+         VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+      VkMemoryFdPropertiesKHR mem_fd_props = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
+         .pNext = NULL,
+         .memoryTypeBits = 0,
+      };
+      args->ret =
+         vk->GetMemoryFdPropertiesKHR(args->device, handle_type, res->u.fd, &mem_fd_props);
+      if (args->ret != VK_SUCCESS)
+         return;
+      memoryTypeBits = mem_fd_props.memoryTypeBits;
+#ifdef VK_EXT_external_memory_metal
+   } else if (res->fd_type == VIRGL_RESOURCE_METAL_HEAP) {
+      static const VkExternalMemoryHandleTypeFlagBits handle_type =
+         VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT;
+      VkMemoryMetalHandlePropertiesEXT mem_metal_props = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_METAL_HANDLE_PROPERTIES_EXT,
+         .pNext = NULL,
+         .memoryTypeBits = 0,
+      };
+      args->ret =
+         vk->GetMemoryMetalHandlePropertiesEXT(args->device, handle_type, res->u.metal_heap, &mem_metal_props);
+      if (args->ret != VK_SUCCESS)
+         return;
+      memoryTypeBits = mem_metal_props.memoryTypeBits;
+#endif
+   } else {
       args->ret = VK_ERROR_INVALID_EXTERNAL_HANDLE;
       return;
    }
 
-   static const VkExternalMemoryHandleTypeFlagBits handle_type =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-   VkMemoryFdPropertiesKHR mem_fd_props = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
-      .pNext = NULL,
-      .memoryTypeBits = 0,
-   };
-   vn_replace_vkGetMemoryResourcePropertiesMESA_args_handle(args);
-   args->ret =
-      vk->GetMemoryFdPropertiesKHR(args->device, handle_type, res->u.fd, &mem_fd_props);
-   if (args->ret != VK_SUCCESS)
-      return;
-
-   args->pMemoryResourceProperties->memoryTypeBits = mem_fd_props.memoryTypeBits;
+   args->pMemoryResourceProperties->memoryTypeBits = memoryTypeBits;
 
    VkMemoryResourceAllocationSizePropertiesMESA *alloc_size_props =
       vkr_find_struct(args->pMemoryResourceProperties->pNext,
@@ -585,6 +656,7 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
 
    const bool can_export_dma_buf = mem->valid_fd_types & (1 << VIRGL_RESOURCE_FD_DMABUF);
    const bool can_export_opaque = mem->valid_fd_types & (1 << VIRGL_RESOURCE_FD_OPAQUE);
+   const bool can_export_metal = mem->valid_fd_types & (1 << VIRGL_RESOURCE_METAL_HEAP);
    enum virgl_resource_fd_type fd_type;
    VkExternalMemoryHandleTypeFlagBits handle_type;
    struct virgl_resource_vulkan_info vulkan_info;
@@ -599,10 +671,16 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
       /* prefer dmabuf for easier mapping? */
       fd_type = VIRGL_RESOURCE_FD_DMABUF;
       handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-   } else if (can_export_opaque) {
+   } else if (can_export_opaque || can_export_metal) {
       /* prefer opaque for performance? */
-      fd_type = VIRGL_RESOURCE_FD_OPAQUE;
-      handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+      if (can_export_opaque) {
+         fd_type = VIRGL_RESOURCE_FD_OPAQUE;
+         handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+      } else {
+         assert(can_export_metal);
+         fd_type = VIRGL_RESOURCE_METAL_HEAP;
+         handle_type = VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT;
+      }
 
       STATIC_ASSERT(sizeof(vulkan_info.device_uuid) == VK_UUID_SIZE);
       STATIC_ASSERT(sizeof(vulkan_info.driver_uuid) == VK_UUID_SIZE);
@@ -620,6 +698,7 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
    }
 
    int fd;
+   void *metal_heap;
    if (mem->udmabuf_fd >= 0) {
       fd = os_dupfd_cloexec(mem->udmabuf_fd);
       if (fd < 0) {
@@ -635,6 +714,23 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
          vkr_log("mem gbm bo export failed (ret %d)", fd);
          return false;
       }
+   } else if (can_export_metal) {
+#ifdef VK_EXT_external_memory_metal
+      assert(handle_type == VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT);
+      struct vn_device_proc_table *vk = &mem->device->proc_table;
+      const VkMemoryGetMetalHandleInfoEXT metal_info = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_GET_METAL_HANDLE_INFO_EXT,
+         .memory = mem->base.handle.device_memory,
+         .handleType = handle_type,
+      };
+      VkResult ret = vk->GetMemoryMetalHandleEXT(mem->device->base.handle.device, &metal_info, &metal_heap);
+      if (ret != VK_SUCCESS) {
+         vkr_log("metal export failed (vk ret %d)", ret);
+         return false;
+      }
+#else
+      return false;
+#endif
    } else {
       struct vn_device_proc_table *vk = &mem->device->proc_table;
       const VkMemoryGetFdInfoKHR fd_info = {
@@ -663,10 +759,15 @@ vkr_device_memory_export_blob(struct vkr_device_memory *mem,
 
    *out_blob = (struct virgl_context_blob){
       .type = fd_type,
-      .u.fd = fd,
       .map_info = map_info,
       .vulkan_info = vulkan_info,
    };
+
+   if (fd_type == VIRGL_RESOURCE_METAL_HEAP) {
+      out_blob->u.metal_heap = metal_heap;
+   } else {
+      out_blob->u.fd = fd;
+   }
 
    return true;
 }

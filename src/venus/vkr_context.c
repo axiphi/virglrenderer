@@ -35,6 +35,13 @@
 #include "vkr_ring.h"
 #include "vkr_transport.h"
 
+#ifdef __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
+#else
+#define CFRetain(x) (x)
+#define CFRelease(x)
+#endif
+
 void
 vkr_context_add_instance(struct vkr_context *ctx,
                          struct vkr_instance *instance,
@@ -191,6 +198,8 @@ vkr_context_free_resource(struct hash_entry *entry)
    struct vkr_resource *res = entry->data;
    if (res->fd_type == VIRGL_RESOURCE_FD_SHM)
       munmap(res->u.data, res->size);
+   else if (res->fd_type == VIRGL_RESOURCE_METAL_HEAP)
+      CFRelease(res->u.metal_heap);
    else if (res->u.fd >= 0)
       close(res->u.fd);
    free(res);
@@ -315,6 +324,34 @@ vkr_context_create_resource_from_shm(struct vkr_context *ctx,
 }
 
 static bool
+vkr_context_import_resource_metal(struct vkr_context *ctx,
+                                  uint32_t res_id,
+                                  uint64_t blob_size,
+                                  enum virgl_resource_fd_type fd_type,
+                                  void *metal_heap)
+{
+   assert(!vkr_context_get_resource(ctx, res_id));
+   assert(fd_type == VIRGL_RESOURCE_METAL_HEAP);
+
+   struct vkr_resource *res = malloc(sizeof(*res));
+   if (!res)
+      return false;
+
+   res->res_id = res_id;
+   res->fd_type = fd_type;
+   res->size = blob_size;
+   res->u.metal_heap = (void *)CFRetain(metal_heap);
+
+   if (!vkr_context_add_resource(ctx, res)) {
+      CFRelease(metal_heap);
+      free(res);
+      return false;
+   }
+
+   return true;
+}
+
+static bool
 vkr_context_create_resource_from_device_memory(struct vkr_context *ctx,
                                                uint32_t res_id,
                                                uint64_t blob_id,
@@ -331,6 +368,11 @@ vkr_context_create_resource_from_device_memory(struct vkr_context *ctx,
    struct virgl_context_blob blob;
    if (!vkr_device_memory_export_blob(mem, blob_size, blob_flags, &blob))
       return false;
+
+   if (blob.type == VIRGL_RESOURCE_METAL_HEAP) {
+      *out_blob = blob;
+      return vkr_context_import_resource_metal(ctx, res_id, blob_size, blob.type, blob.u.metal_heap);
+   }
 
    /* If memory might get exported, store a dup'ed fd in vkr_resource for:
     * - vkAllocateMemory for dma_buf import
