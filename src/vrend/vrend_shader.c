@@ -5229,7 +5229,8 @@ get_source_info(struct dump_ctx *ctx,
          bool isabsolute = src->Register.Absolute;
          snprintf(fp64_src, sizeof(fp64_src), "%s", src_buf->buf);
          strbuf_fmt(src_buf, "fp64_src[%d]", i);
-         emit_buff(&ctx->glsl_strbufs, "%s.x = %spackDouble2x32(uvec2(%s%s))%s;\n", src_buf->buf, isabsolute ? "abs(" : "", fp64_src, swizzle, isabsolute ? ")" : "");
+         emit_buff(&ctx->glsl_strbufs, "%s.x = %spackDouble2x32(uvec2(%s%s.xy))%s;\n", src_buf->buf, isabsolute ? "abs(" : "", fp64_src, swizzle, isabsolute ? ")" : "");
+         emit_buff(&ctx->glsl_strbufs, "%s.y = %spackDouble2x32(uvec2(%s%s.zw))%s;\n", src_buf->buf, isabsolute ? "abs(" : "", fp64_src, swizzle, isabsolute ? ")" : "");
       }
    }
 
@@ -6182,14 +6183,15 @@ iter_instruction(struct tgsi_iterate_context *iter,
       break;
    }
 
-   for (uint32_t i = 0; i < 1; i++) {
-      enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(inst->Instruction.Opcode);
-      if (dtype == TGSI_TYPE_DOUBLE) {
-         emit_buff(&ctx->glsl_strbufs, "%s = uintBitsToFloat(unpackDouble2x32(%s));\n", fp64_dsts[0], dsts[0]);
-      }
-   }
    if (inst->Instruction.Saturate) {
       emit_buff(&ctx->glsl_strbufs, "%s = clamp(%s, 0.0, 1.0);\n", dsts[0], dsts[0]);
+   }
+
+   for (uint32_t i = 0; i < inst->Instruction.NumDstRegs; i++) {
+      enum tgsi_opcode_type dtype = tgsi_opcode_infer_dst_type(inst->Instruction.Opcode);
+      if (dtype == TGSI_TYPE_DOUBLE) {
+         emit_buff(&ctx->glsl_strbufs, "%s = uintBitsToFloat(unpackDouble2x32(%s));\n", fp64_dsts[i], dsts[i]);
+      }
    }
 
    if (strbuf_get_error(&ctx->glsl_strbufs.glsl_main))
