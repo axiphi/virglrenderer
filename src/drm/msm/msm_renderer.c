@@ -77,7 +77,13 @@ struct msm_context {
 };
 DEFINE_CAST(drm_context, msm_context)
 
-#define valid_payload_len(req) ((req)->len <= ((req)->hdr.len - sizeof(*(req))))
+#define valid_payload_len(req)                                                 \
+   __extension__ ({                                                            \
+      typeof(req) _inner_req = (req);                                          \
+      _inner_req->hdr.len >= sizeof(*_inner_req) &&                            \
+      _inner_req->len <= _inner_req->hdr.len - sizeof(*_inner_req);            \
+   })
+#pragma GCC poison _inner_req
 
 static int
 gem_info(struct msm_context *mctx, uint32_t handle, uint32_t param, uint64_t *val)
