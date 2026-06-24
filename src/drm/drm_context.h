@@ -40,7 +40,11 @@ struct drm_object {
 struct drm_context {
    struct virgl_context base;
 
+   /* This will be copied into the guest after every command. */
    struct vdrm_shmem *shmem;
+   /* A pointer to the response memory, which is shared with the guest.
+    * The actual mapped buffer is at rsp_mem - shmem->rsp_mem_offset.
+    */
    uint8_t *rsp_mem;
    uint32_t rsp_mem_sz;
    uint32_t blob_size;

@@ -46,13 +46,26 @@ drm_context_transfer_3d(UNUSED struct virgl_context *vctx,
    return -1;
 }
 
+static uint32_t
+drm_context_shmem_size(struct drm_context *dctx)
+{
+   return dctx->blob_size - dctx->rsp_mem_sz;
+}
+
+static volatile uint8_t *
+drm_context_shmem_base(struct drm_context *dctx)
+{
+   return (uint8_t *)dctx->rsp_mem - drm_context_shmem_size(dctx);
+}
+
 static void
 drm_context_unmap_shmem_blob(struct drm_context *dctx)
 {
    if (!dctx->shmem)
       return;
 
-   munmap(dctx->shmem, dctx->blob_size);
+   munmap((void *)drm_context_shmem_base(dctx), dctx->blob_size);
+   free(dctx->shmem);
 
    dctx->shmem = NULL;
    dctx->rsp_mem = NULL;
@@ -74,6 +87,55 @@ drm_check_shm_bounds(struct drm_context *dctx, const struct vdrm_ccmd_req *hdr,
    }
 
    return true;
+}
+
+/* Copy 'size' bytes from source to destination.  Both must
+ * be 8-byte aligned, but the size doesn't have to be.
+ * The destination is written to with volatile stores.
+ * The offset specifies the offset to start copying at.
+ * If size < offset, nothing is copied at all.
+ */
+static void drm_context_volatile_copy(volatile uint8_t *dst,
+                                      const uint8_t *src,
+                                      size_t size,
+                                      size_t offset)
+{
+   if (size <= offset)
+      return;
+
+   dst += offset;
+   src += offset;
+   size -= offset;
+
+   /* Some existing code might have assumptions about certain fields
+    * in shared memory being updated atomically.  To avoid violating
+    * them, do the copy 8 bytes at a time.  If there is anything left,
+    * copy a 4-byte block, then a 2-byte block, and finally 1 byte.
+    */
+   while (size >= sizeof(uint64_t)) {
+      *(volatile uint64_t *)dst = *(const uint64_t *)src;
+      dst += sizeof(uint64_t);
+      src += sizeof(uint64_t);
+      size -= sizeof(uint64_t);
+   }
+
+   if (size >= sizeof(uint32_t)) {
+      *(volatile uint32_t *)dst = *(const uint32_t *)src;
+      dst += sizeof(uint32_t);
+      src += sizeof(uint32_t);
+      size -= sizeof(uint32_t);
+   }
+
+   if (size >= sizeof(uint16_t)) {
+      *(volatile uint16_t *)dst = *(const uint16_t *)src;
+      dst += sizeof(uint16_t);
+      src += sizeof(uint16_t);
+      size -= sizeof(uint16_t);
+   }
+
+   if (size) {
+      *dst = *src;
+   }
 }
 
 static int
@@ -120,6 +182,21 @@ drm_context_submit_cmd_dispatch(struct drm_context *dctx, const struct vdrm_ccmd
    TRACE_SCOPE_END(trace_scope);
 
    free(buf);
+
+   /* dctx->shmem is a private copy of the shared memory, not the actual
+    * shared buffer.  This ensures that renderers can safely access it with
+    * ordinary C code and do not need to worry about guests tampering with
+    * it.  However, it also means that data must be copied back to the guest
+    * even on failure.
+    *
+    * Skip the dctx->shmem struct itself, as rsp_mem_offset should never
+    * change and seqno is updated below.
+    */
+   static_assert(sizeof(*dctx->shmem) == 8, "wrong vdrm_shmem size");
+   drm_context_volatile_copy(drm_context_shmem_base(dctx),
+                             (const uint8_t *)dctx->shmem,
+                             drm_context_shmem_size(dctx),
+                             sizeof(*dctx->shmem));
 
    if (ret) {
       drm_err("%s: dispatch failed: %d (%s)", ccmd->name, ret, strerror(errno));
@@ -383,12 +460,17 @@ drm_context_get_shmem_blob(struct drm_context *dctx,
 {
    int fd;
 
+   /* There must either be both a valid shmem struct and a
+    * valid response memory pointer, or both must be NULL.
+    */
+   assert((dctx->shmem == NULL) == (dctx->rsp_mem == NULL));
+
    if (blob_flags != VIRGL_RENDERER_BLOB_FLAG_USE_MAPPABLE) {
       drm_err("invalid blob_flags: 0x%x", blob_flags);
       return -EINVAL;
    }
 
-   if (dctx->shmem || dctx->blob_size) {
+   if (dctx->shmem || dctx->blob_size || dctx->rsp_mem) {
       drm_err("there can be only one!");
       return -EINVAL;
    }
@@ -413,17 +495,19 @@ drm_context_get_shmem_blob(struct drm_context *dctx,
    }
 #endif
 
-   dctx->shmem = mmap(NULL, blob_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
-   if (dctx->shmem == MAP_FAILED) {
-      drm_err("shmem mmap failed: %s", strerror(errno));
-      dctx->shmem = NULL;
-      close(fd);
-      return -ENOMEM;
+   dctx->shmem = calloc(1, shmem_size);
+   if (dctx->shmem == NULL) {
+      drm_err("shmem struct alloc failed: %s", strerror(errno));
+      goto fail;
    }
 
    dctx->shmem->rsp_mem_offset = shmem_size;
 
-   uint8_t *ptr = (uint8_t *)dctx->shmem;
+   uint8_t *ptr = mmap(NULL, blob_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+   if (ptr == MAP_FAILED) {
+      drm_err("shmem mmap failed: %s", strerror(errno));
+      goto fail;
+   }
    dctx->rsp_mem = ptr + shmem_size;
    dctx->rsp_mem_sz = blob_size - shmem_size;
    dctx->blob_size = blob_size;
@@ -433,6 +517,12 @@ drm_context_get_shmem_blob(struct drm_context *dctx,
    blob->map_info = VIRGL_RENDERER_MAP_CACHE_CACHED;
 
    return 0;
+fail:
+   close(fd);
+   free(dctx->shmem);
+   dctx->shmem = NULL;
+   dctx->rsp_mem = NULL;
+   return -ENOMEM;
 }
 
 bool
