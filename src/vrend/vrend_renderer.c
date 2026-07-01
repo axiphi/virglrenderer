@@ -2659,6 +2659,90 @@ static inline GLenum to_gl_swizzle(enum pipe_swizzle swizzle)
    }
 }
 
+
+static void
+vrend_normalize_sampler_view_tex_range(struct vrend_context *ctx,
+                                       struct vrend_resource *res,
+                                       struct vrend_sampler_view *view)
+{
+   unsigned first_level = view->u.tex.first_level;
+   unsigned last_level = view->u.tex.last_level;
+   unsigned max_level = res->base.last_level;
+   unsigned first_layer = view->u.tex.first_layer;
+   unsigned last_layer = view->u.tex.last_layer;
+   unsigned max_layer;
+   bool changed = false;
+
+   if (first_level > max_level) {
+      first_level = max_level;
+      changed = true;
+   }
+   if (last_level > max_level || last_level == 0xff) {
+      last_level = max_level;
+      changed = true;
+   }
+   if (last_level < first_level) {
+      last_level = max_level;
+      changed = true;
+   }
+
+   max_layer = util_max_layer(&res->base, first_level);
+
+   if (max_layer == 0) {
+      if (first_layer != 0 || last_layer != 0) {
+         first_layer = 0;
+         last_layer = 0;
+         changed = true;
+      }
+   } else {
+      if (first_layer > max_layer) {
+         first_layer = max_layer;
+         changed = true;
+      }
+      if (last_layer == 0xffff || last_layer > max_layer) {
+         last_layer = max_layer;
+         changed = true;
+      }
+      if (last_layer < first_layer) {
+         last_layer = max_layer;
+         changed = true;
+      }
+   }
+
+   if (changed) {
+      VREND_DEBUG(dbg_tex, ctx,
+                  "Normalize sampler view range layers %u-%u levels %u-%u -> %u-%u / %u-%u "
+                  "(resource max layer %u level %u)\n",
+                  view->u.tex.first_layer, view->u.tex.last_layer,
+                  view->u.tex.first_level, view->u.tex.last_level,
+                  first_layer, last_layer, first_level, last_level,
+                  max_layer, max_level);
+   }
+
+   view->u.tex.first_layer = first_layer;
+   view->u.tex.last_layer = last_layer;
+   view->u.tex.first_level = first_level;
+   view->u.tex.last_level = last_level;
+}
+
+static bool
+vrend_sampler_view_needs_gl_texture_view(struct vrend_resource *res,
+                                         struct vrend_sampler_view *view)
+{
+   (void)res;
+   if (view->target != view->texture->target)
+      return true;
+
+   if (view->format != view->texture->base.format &&
+       !util_format_is_depth_or_stencil(view->texture->base.format))
+      return true;
+
+   if (view->u.tex.first_layer > 0 || view->u.tex.first_level > 0)
+      return true;
+
+   return false;
+}
+
 int vrend_create_sampler_view(struct vrend_context *ctx,
                               uint32_t handle,
                               struct vrend_resource *res,
@@ -2719,6 +2803,7 @@ int vrend_create_sampler_view(struct vrend_context *ctx,
       view->u.tex.last_layer = (val0 >> 16) & 0xffff;
       view->u.tex.first_level = val1 & 0xff;
       view->u.tex.last_level = (val1 >> 8) & 0xff;
+      vrend_normalize_sampler_view_tex_range(ctx, res, view);
    }
 
    view->srgb_decode = GL_DECODE_EXT;
@@ -2765,15 +2850,7 @@ int vrend_create_sampler_view(struct vrend_context *ctx,
 
    if (!has_bit(view->texture->storage_bits, VREND_STORAGE_GL_BUFFER)) {
       enum virgl_formats format;
-      bool needs_view = false;
-
-      /*
-       * Need to use a texture view if the gallium
-       * view target is different than the underlying
-       * texture target.
-       */
-      if (view->target != view->texture->target)
-         needs_view = true;
+      bool needs_view = vrend_sampler_view_needs_gl_texture_view(res, view);
 
       /*
        * If the formats are different and this isn't
@@ -2788,11 +2865,6 @@ int vrend_create_sampler_view(struct vrend_context *ctx,
       format = view->format;
       if (util_format_is_depth_or_stencil(view->texture->base.format))
          format = view->texture->base.format;
-      else if (view->format != view->texture->base.format)
-         needs_view = true;
-
-      if (view->u.tex.first_layer > 0 || view->u.tex.first_level > 0)
-         needs_view = true;
 
       if (needs_view &&
           has_bit(view->texture->storage_bits, VREND_STORAGE_GL_IMMUTABLE) &&
