@@ -404,6 +404,8 @@ struct global_renderer_state {
 #endif
    bool d3d_share_texture : 1;
    bool gbm_layout_feat : 1;
+   bool has_fragment_coord_conventions : 1;
+   bool has_fragment_coord_conventions_valid : 1;
 };
 
 struct sysval_uniform_block {
@@ -875,6 +877,8 @@ struct vrend_context {
 };
 
 static int get_glsl_version(void);
+static bool vrend_probe_fragment_coord_conventions(void);
+static bool vrend_has_fragment_coord_conventions(void);
 static void vrend_pause_render_condition(struct vrend_context *ctx, bool pause);
 static void vrend_update_viewport_state(struct vrend_sub_context *sub_ctx);
 static void vrend_update_scissor_state(struct vrend_sub_context *sub_ctx);
@@ -7660,6 +7664,13 @@ int vrend_renderer_init(const struct vrend_if_cbs *cbs, uint32_t flags)
 
    vrend_state.use_integer = use_integer();
 
+   if (!vrend_state.use_gles) {
+      vrend_state.has_fragment_coord_conventions =
+         epoxy_has_gl_extension("GL_ARB_fragment_coord_conventions") ||
+         vrend_probe_fragment_coord_conventions();
+      vrend_state.has_fragment_coord_conventions_valid = true;
+   }
+
    init_features(gles ? 0 : gl_ver,
                  gles ? gl_ver : 0);
 
@@ -8032,6 +8043,8 @@ struct vrend_context *vrend_create_context(int id, uint32_t nlen, const char *de
    grctx->shader_cfg.has_gpu_shader5 = has_feature(feat_gpu_shader5);
    grctx->shader_cfg.has_es31_compat = has_feature(feat_gles31_compatibility);
    grctx->shader_cfg.has_conservative_depth = has_feature(feat_conservative_depth);
+   grctx->shader_cfg.has_fragment_coord_conventions =
+      vrend_state.use_gles || vrend_has_fragment_coord_conventions();
    grctx->shader_cfg.use_integer = vrend_state.use_integer;
    grctx->shader_cfg.has_dual_src_blend = has_feature(feat_dual_src_blend);
    grctx->shader_cfg.has_fbfetch_coherent = has_feature(feat_framebuffer_fetch);
@@ -12197,6 +12210,39 @@ static void set_format_bit(struct virgl_supported_format_mask *mask, enum virgl_
    mask->bitmask[idx] |= 1u << bit;
 }
 
+static bool vrend_probe_fragment_coord_conventions(void)
+{
+   static const char *gl_fs =
+      "#version 150\n"
+      "layout(origin_upper_left, pixel_center_integer) in vec4 gl_FragCoord;\n"
+      "out vec4 col;\n"
+      "void main() { col = gl_FragCoord; }\n";
+   const char *src = gl_fs;
+   GLuint shader = glCreateShader(GL_FRAGMENT_SHADER);
+   GLint ok = GL_FALSE;
+
+   if (!shader)
+      return false;
+
+   glShaderSource(shader, 1, &src, NULL);
+   glCompileShader(shader);
+   glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+   glDeleteShader(shader);
+
+   return ok == GL_TRUE;
+}
+
+static bool vrend_has_fragment_coord_conventions(void)
+{
+   if (vrend_state.has_fragment_coord_conventions_valid)
+      return vrend_state.has_fragment_coord_conventions;
+
+   if (epoxy_has_gl_extension("GL_ARB_fragment_coord_conventions"))
+      return true;
+
+   return false;
+}
+
 /*
  * Does all of the common caps setting,
  * if it dedects a early out returns true.
@@ -12257,12 +12303,19 @@ static void vrend_renderer_fill_caps_v1(int gl_ver, int gles_ver, union virgl_ca
    if (has_feature(feat_depth_clamp))
       caps->v1.bset.depth_clip_disable = 1;
 
+   if (vrend_state.use_gles) {
+      if (gl_ver >= 32)
+         caps->v1.bset.fragment_coord_conventions = 1;
+      else if (epoxy_has_gl_extension("GL_ARB_fragment_coord_conventions"))
+         caps->v1.bset.fragment_coord_conventions = 1;
+   } else {
+      caps->v1.bset.fragment_coord_conventions =
+         vrend_has_fragment_coord_conventions() ? 1 : 0;
+   }
+
    if (gl_ver >= 32) {
-      caps->v1.bset.fragment_coord_conventions = 1;
       caps->v1.bset.seamless_cube_map = 1;
    } else {
-      if (epoxy_has_gl_extension("GL_ARB_fragment_coord_conventions"))
-         caps->v1.bset.fragment_coord_conventions = 1;
       if (epoxy_has_gl_extension("GL_ARB_seamless_cube_map") || gles_ver >= 30)
          caps->v1.bset.seamless_cube_map = 1;
    }
