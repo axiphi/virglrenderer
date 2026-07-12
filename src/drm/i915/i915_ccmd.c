@@ -111,8 +111,20 @@ i915_ccmd_ioctl_simple(struct drm_context *dctx, struct vdrm_ccmd_req *hdr)
       break;
    }
    case DRM_IOCTL_I915_GEM_VM_CREATE:
-   case DRM_IOCTL_I915_GEM_VM_DESTROY:
+   case DRM_IOCTL_I915_GEM_VM_DESTROY: {
+      const struct drm_i915_gem_vm_control *vm_control =
+         (const void *)req->payload;
+      if (vm_control->extensions != 0) {
+         drm_err("ioctl %08x (0x%x): extensions present", req->cmd, iocnr);
+         return -EINVAL;
+      }
+      if (vm_control->flags != 0) {
+         drm_err("ioctl %08x (0x%x): flags present", req->cmd, iocnr);
+         return -EINVAL;
+      }
+      /* XXX check that the VM ID is valid */
       break;
+   }
    default:
       drm_err("invalid ioctl: %08x (0x%x)", req->cmd, iocnr);
       return -EINVAL;
