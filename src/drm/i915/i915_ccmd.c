@@ -404,6 +404,17 @@ i915_ccmd_gem_context_create(struct drm_context *dctx, struct vdrm_ccmd_req *hdr
          return -EINVAL;
       }
 
+      setparam = (void *)ptr;
+      ptr += sizeof(*setparam);
+      params_size -= (int64_t)sizeof(*setparam);
+
+      if (setparam->param.size > params_size ||
+          (setparam->param.size % 4) || setparam->param.size > 128)
+      {
+         drm_err("invalid setparam->param.size");
+         return -EINVAL;
+      }
+
       switch (setparam->param.param) {
       case I915_CONTEXT_PARAM_PRIORITY:
          if (setparam->param.value > I915_CONTEXT_DEFAULT_PRIORITY) {
@@ -426,19 +437,12 @@ i915_ccmd_gem_context_create(struct drm_context *dctx, struct vdrm_ccmd_req *hdr
          return -EINVAL;
       }
 
-      ptr += sizeof(*setparam);
-
-      if ((setparam->param.size % 4) || setparam->param.size > 128) {
-         drm_err("invalid setparam->param.size");
-         return -EINVAL;
-      }
-
       if (setparam->param.size) {
          setparam->param.value = ptr;
          ptr += setparam->param.size;
       }
 
-      params_size -= sizeof(*setparam) + setparam->param.size;
+      params_size -= setparam->param.size;
 
       if (params_size > 0) {
          setparam->base.next_extension = ptr;
