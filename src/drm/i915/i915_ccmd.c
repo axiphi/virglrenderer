@@ -386,12 +386,21 @@ i915_ccmd_gem_context_create(struct drm_context *dctx, struct vdrm_ccmd_req *hdr
 
    struct drm_i915_gem_context_create_ext create = {
       .flags = req->flags,
-      .extensions = (uintptr_t)setparam,
    };
 
-   while (params_size > 0) {
-      if (params_size < (int)sizeof(*setparam)) {
-         drm_err("invalid params_size");
+   /* known flags are 1 and 2 */
+   if (req->flags > 3) {
+      drm_err("unknown flag");
+      return -EINVAL;
+   }
+
+   if ((req->flags & I915_CONTEXT_CREATE_FLAGS_USE_EXTENSIONS) == 0)
+      goto no_extensions;
+
+   create.extensions = ptr;
+   for (;;) {
+      if (params_size < (int64_t)sizeof(*setparam)) {
+         drm_err("invalid params_size %" PRIu64, params_size);
          return -EINVAL;
       }
 
@@ -436,9 +445,11 @@ i915_ccmd_gem_context_create(struct drm_context *dctx, struct vdrm_ccmd_req *hdr
          setparam = (void*)ptr;
       } else {
          setparam->base.next_extension = 0;
+         break;
       }
    }
 
+no_extensions:
    if (params_size) {
       drm_err("invalid params_size");
       return -EINVAL;
