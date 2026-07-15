@@ -366,7 +366,6 @@ static int
 i915_ccmd_gem_context_create(struct drm_context *dctx, struct vdrm_ccmd_req *hdr)
 {
    struct i915_ccmd_gem_context_create_req *req = to_i915_ccmd_gem_context_create_req(hdr);
-   struct drm_i915_gem_context_create_ext_setparam *setparam = (void *)req->payload;
    uintptr_t ptr = (uintptr_t)req->payload;
    int64_t params_size = req->params_size;
    size_t req_len;
@@ -399,6 +398,10 @@ i915_ccmd_gem_context_create(struct drm_context *dctx, struct vdrm_ccmd_req *hdr
 
    create.extensions = ptr;
    for (;;) {
+      struct {
+         struct drm_i915_gem_context_create_ext_setparam p;
+      } DRM_ALIGN_4 *setparam;
+
       if (params_size < (int64_t)sizeof(*setparam)) {
          drm_err("invalid params_size %" PRIu64, params_size);
          return -EINVAL;
@@ -408,16 +411,16 @@ i915_ccmd_gem_context_create(struct drm_context *dctx, struct vdrm_ccmd_req *hdr
       ptr += sizeof(*setparam);
       params_size -= (int64_t)sizeof(*setparam);
 
-      if (setparam->param.size > params_size ||
-          (setparam->param.size % 4) || setparam->param.size > 128)
+      if (setparam->p.param.size > params_size ||
+          (setparam->p.param.size % 4) || setparam->p.param.size > 128)
       {
-         drm_err("invalid setparam->param.size");
+         drm_err("invalid setparam->p.param.size");
          return -EINVAL;
       }
 
-      switch (setparam->param.param) {
+      switch (setparam->p.param.param) {
       case I915_CONTEXT_PARAM_PRIORITY:
-         if (setparam->param.value > I915_CONTEXT_DEFAULT_PRIORITY) {
+         if (setparam->p.param.value > I915_CONTEXT_DEFAULT_PRIORITY) {
             rsp->ret = EPERM;
             return 0;
          }
@@ -433,22 +436,21 @@ i915_ccmd_gem_context_create(struct drm_context *dctx, struct vdrm_ccmd_req *hdr
          break;
 
       default:
-         drm_err("invalid param %llu", setparam->param.param);
+         drm_err("invalid param %llu", setparam->p.param.param);
          return -EINVAL;
       }
 
-      if (setparam->param.size) {
-         setparam->param.value = ptr;
-         ptr += setparam->param.size;
+      if (setparam->p.param.size) {
+         setparam->p.param.value = ptr;
+         ptr += setparam->p.param.size;
       }
 
-      params_size -= setparam->param.size;
+      params_size -= setparam->p.param.size;
 
       if (params_size > 0) {
-         setparam->base.next_extension = ptr;
-         setparam = (void*)ptr;
+         setparam->p.base.next_extension = ptr;
       } else {
-         setparam->base.next_extension = 0;
+         setparam->p.base.next_extension = 0;
          break;
       }
    }
