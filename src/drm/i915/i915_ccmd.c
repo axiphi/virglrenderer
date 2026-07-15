@@ -430,10 +430,31 @@ i915_ccmd_gem_context_create(struct drm_context *dctx, struct vdrm_ccmd_req *hdr
       case I915_CONTEXT_PARAM_SSEU:
       case I915_CONTEXT_PARAM_RECOVERABLE:
       case I915_CONTEXT_PARAM_VM:
-      case I915_CONTEXT_PARAM_ENGINES:
       case I915_CONTEXT_PARAM_PERSISTENCE:
       case I915_CONTEXT_PARAM_PROTECTED_CONTENT:
          break;
+
+      case I915_CONTEXT_PARAM_ENGINES: {
+         /*
+          * This struct starts with a __u64 extensions, which must be 0
+          * (null pointer).  Don't cast to 'struct i915_context_param_engines *'
+          * as that requires 8-byte alignment.
+          */
+         struct {
+            __u64 extensions;
+         } DRM_ALIGN_4 *param;
+         if (setparam->p.param.size < sizeof(*param)) {
+            drm_err("wrong size paramter for I915_CONTEXT_PARAM_ENGINES: %" PRIu32 "<  %zu",
+                    size, sizeof(*param));
+            return -EINVAL;
+         }
+         param = (void *)ptr;
+         if (param->extensions != 0) {
+            drm_err("extensions set for I915_CONTEXT_PARAM_ENGINES");
+            return -EINVAL;
+         }
+         break;
+      }
 
       default:
          drm_err("invalid param %llu", setparam->p.param.param);
