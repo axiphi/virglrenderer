@@ -1121,6 +1121,7 @@ static const char *vrend_ctx_error_strings[] = {
    [VIRGL_ERROR_CTX_BLIT_AREA_OUT_OF_RANGE] = "Blit z-slices out of range;",
    [VIRGL_ERROR_CTX_SSBO_BINDING_RANGE] = "SSBO binding out of range for resource",
    [VIRGL_ERROR_CTX_RESOURCE_OUT_OF_RANGE] = "Resource copy out of range for resource",
+   [VIRGL_ERROR_CTX_CHECK_NO_ERROR] = "glGetError returns",
 };
 
 void vrend_report_context_error_internal(const char *fname, struct vrend_context *ctx,
@@ -1128,9 +1129,9 @@ void vrend_report_context_error_internal(const char *fname, struct vrend_context
 {
    ctx->in_error = true;
    ctx->last_error = error;
-   virgl_error("%s: context error reported %d \"%s\" %s %d\n", fname,
+   virgl_error("%s: context error reported %d \"%s\" %s %d %s\n", fname,
                ctx->ctx_id, ctx->debug_name, vrend_ctx_error_strings[error],
-               value);
+               value, vrend_debug_glerror_string(value));
 }
 
 #define CORE_PROFILE_WARN_NONE 0
@@ -7526,7 +7527,7 @@ bool vrend_check_no_error(struct vrend_context *ctx)
 
    while (err != GL_NO_ERROR) {
 #ifdef CHECK_GL_ERRORS
-      vrend_report_context_error(ctx, VIRGL_ERROR_CTX_UNKNOWN, err);
+      vrend_report_context_error(ctx, VIRGL_ERROR_CTX_CHECK_NO_ERROR, err);
 #else
       virgl_warn("GL error reported (%d) for context %d\n", err, ctx->ctx_id);
 #endif

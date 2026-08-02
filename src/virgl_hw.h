@@ -854,6 +854,7 @@ enum virgl_ctx_errors {
         VIRGL_ERROR_CTX_BLIT_AREA_OUT_OF_RANGE,
         VIRGL_ERROR_CTX_SSBO_BINDING_RANGE,
         VIRGL_ERROR_CTX_RESOURCE_OUT_OF_RANGE,
+        VIRGL_ERROR_CTX_CHECK_NO_ERROR,
 };
 
 enum virgl_statistics_query_index {

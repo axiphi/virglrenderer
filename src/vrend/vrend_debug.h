@@ -73,6 +73,8 @@ unsigned vrend_debug(const struct vrend_context *ctx, enum virgl_debug_flags fla
 
 void vrend_debug_add_flag(enum virgl_debug_flags flag);
 
+const char *vrend_debug_glerror_string(uint32_t glerror);
+
 #ifdef NDEBUG
 #define VREND_DEBUG_ENABLED (false)
 #else
