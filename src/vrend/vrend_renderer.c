@@ -2934,11 +2934,12 @@ static void vrend_framebuffer_texture_2d(struct vrend_resource *res,
 }
 
 static
-void debug_texture(ASSERTED const char *f, const struct vrend_resource *gt)
+void debug_texture(ASSERTED const char *f, const struct vrend_context *ctx,
+   const struct vrend_resource *gt)
 {
    ASSERTED const struct pipe_resource *pr = &gt->base;
 #define PRINT_TARGET(X) case X: virgl_debug( #X); break
-   VREND_DEBUG_EXT(dbg_tex, NULL,
+   VREND_DEBUG_EXT(dbg_tex, ctx,
                virgl_debug("%s: ", f);
                switch (tgsitargettogltarget(pr->target, pr->nr_samples)) {
                PRINT_TARGET(GL_TEXTURE_RECTANGLE_NV);
@@ -2968,7 +2969,7 @@ void vrend_fb_bind_texture_id(struct vrend_resource *res,
    const struct util_format_description *desc = util_format_description(res->base.format);
    GLenum attachment = GL_COLOR_ATTACHMENT0 + idx;
 
-   debug_texture(__func__, res);
+   debug_texture(__func__, NULL, res);
 
    if (vrend_format_is_ds(res->base.format)) {
       if (util_format_has_stencil(desc)) {
@@ -5287,7 +5288,7 @@ static GLuint vrend_draw_bind_samplers_shader(struct vrend_sub_context *sub_ctx,
             GLuint id = tview->gl_id;
             GLenum target = tview->target;
 
-            debug_texture(__func__, tview->texture);
+            debug_texture(__func__, sub_ctx->parent, tview->texture);
 
             if (has_bit(tview->texture->storage_bits, VREND_STORAGE_GL_BUFFER)) {
                id = tview->texture->tbo_tex_id;
@@ -8720,7 +8721,7 @@ static int vrend_resource_alloc_texture(struct vrend_resource *gr,
    glGenTextures(1, &gr->gl_id);
    glBindTexture(gr->target, gr->gl_id);
 
-   debug_texture(__func__, gr);
+   debug_texture(__func__, NULL, gr);
 
    if (image_oes) {
       if (has_bit(gr->storage_bits, VREND_STORAGE_GL_IMMUTABLE) &&
@@ -12943,7 +12944,7 @@ void vrend_renderer_fill_caps(uint32_t set, uint32_t version,
    }
 
    vrend_fill_caps_glsl_version(gl_ver, gles_ver, caps);
-   VREND_DEBUG(dbg_features, NULL, "GLSL support level: %d", caps->v1.glsl_level);
+   VREND_DEBUG(dbg_features, NULL, "GLSL support level: %d\n", caps->v1.glsl_level);
 
    vrend_renderer_fill_caps_v1(gl_ver, gles_ver, caps);
 
