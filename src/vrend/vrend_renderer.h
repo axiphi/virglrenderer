@@ -632,7 +632,7 @@ uint32_t vrend_renderer_resource_get_map_info(struct pipe_resource *pres);
 
 int vrend_renderer_resource_map(struct pipe_resource *pres, void **map, uint64_t *out_size);
 
-int vrend_renderer_resource_unmap(struct pipe_resource *pres);
+int vrend_renderer_resource_unmap(struct pipe_resource *pres, void *mmaped, uint64_t map_size);
 
 void vrend_renderer_get_meminfo(struct vrend_context *ctx, uint32_t res_handle);
 

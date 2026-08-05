@@ -1239,9 +1239,9 @@ int virgl_renderer_resource_map(uint32_t res_handle, void **out_map, uint64_t *o
       return -EINVAL;
 
    if (res->pipe_resource) {
-      ret = vrend_renderer_resource_map(res->pipe_resource, &map, &map_size);
+      ret = vrend_renderer_resource_map(res->pipe_resource, &map, &res->map_size);
       if (!ret) {
-         res->map_size = map_size;
+         map_size = res->map_size;
          res->mapped_from_pipe_resource = true;
       }
    } else {
@@ -1357,7 +1357,7 @@ int virgl_renderer_resource_unmap(uint32_t res_handle)
 
    if (res->mapped_from_pipe_resource) {
       assert(res->pipe_resource);
-      ret = vrend_renderer_resource_unmap(res->pipe_resource);
+      ret = vrend_renderer_resource_unmap(res->pipe_resource, res->mapped, res->map_size);
    } else {
       switch (res->fd_type) {
       case VIRGL_RESOURCE_FD_DMABUF:

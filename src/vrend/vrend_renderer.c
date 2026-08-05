@@ -29,6 +29,11 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <errno.h>
+#ifndef _WIN32
+#include <sys/mman.h>
+#else
+#include "mman_win32.h"
+#endif
 #include "pipe/p_shader_tokens.h"
 
 #include "pipe/p_defines.h"
@@ -7769,6 +7774,10 @@ int vrend_renderer_init(const struct vrend_if_cbs *cbs, uint32_t flags)
 
    vrend_state.gbm_layout_feat = vrend_use_gbm_layout_feature(flags);
 
+#ifdef ENABLE_GBM_ALLOCATION
+   if (!gbm)
+      gbm = virgl_gbm_init(-1);
+#endif
    return 0;
 cleanup_and_fail:
    if (flags & VREND_USE_THREAD_SYNC)
@@ -8594,6 +8603,9 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
 #if defined(HAVE_EPOXY_EGL_H) && defined(ENABLE_GBM_ALLOCATION)
    uint32_t gbm_flags = virgl_gbm_convert_flags(gr->base.bind);
    uint32_t gbm_format = 0;
+   bool is_linear_target = (gr->base.bind & VIRGL_BIND_LINEAR) &&
+                           (gr->base.bind & VIRGL_BIND_SCANOUT) &&
+                           (gr->base.bind & VIRGL_BIND_RENDER_TARGET);
    if (virgl_gbm_convert_format(&format, &gbm_format))
       return;
    if (vrend_winsys_different_gpu())
@@ -8613,7 +8625,7 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
     * GBM allocation may be less optimal compared to a regular GL allocation.
     * Skip GBM allocation when we don't actually need it.
     */
-   if (!vrend_state.gbm_layout_feat)
+   if (!vrend_state.gbm_layout_feat && !is_linear_target)
       return;
 
    /*
@@ -8636,8 +8648,15 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
 
    gr->gbm_bo = bo;
    gr->storage_bits |= VREND_STORAGE_GBM_BUFFER;
-
    gr->map_info = virgl_gbm_get_map_info(bo);
+
+   if (!egl) {
+      if (!is_linear_target) {
+         gr->gbm_bo = NULL;
+         gbm_bo_destroy(bo);
+      }
+      return;
+   }
 
    if (!virgl_gbm_gpu_import_required(gr->base.bind))
       return;
@@ -13373,12 +13392,42 @@ struct pipe_resource *vrend_get_blob_pipe(struct vrend_context *ctx, uint64_t bl
    return NULL;
 }
 
+static void
+vrend_renderer_pipe_resource_from_fd(struct vrend_resource *gr,
+                                     uint64_t width, uint64_t height,
+                                     uint64_t map_size, int fd)
+{
+   /* Create a GL memory object importing memory from a FD */
+   GLuint mem_object;
+   GLenum internalformat = tex_conv_table[gr->base.format].internalformat;
+   glCreateMemoryObjectsEXT(1, &mem_object);
+   GLint params = GL_TRUE;
+   glMemoryObjectParameterivEXT(mem_object, GL_DEDICATED_MEMORY_OBJECT_EXT, &params);
+   glImportMemoryFdEXT(mem_object, map_size, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd);
+
+   struct pipe_resource *pr = &gr->base;
+   gr->target = tgsitargettogltarget(pr->target, pr->nr_samples);
+   gr->memobj = mem_object;
+   gr->storage_bits |= VREND_STORAGE_GL_TEXTURE | VREND_STORAGE_GL_MEMOBJ;
+
+   /* Create a GL texture which uses that memory as storage */
+   glGenTextures(1, &gr->gl_id);
+   glBindTexture(gr->target, gr->gl_id);
+   glTexParameteri(gr->target, GL_TEXTURE_TILING_EXT, GL_LINEAR_TILING_EXT);
+   glTexStorageMem2DEXT(gr->target, 1, internalformat, (GLsizei)width, (GLsizei)height, mem_object, 0);
+   glBindTexture(gr->target, 0);
+   gr->base.width0 = width;
+   gr->base.height0 = height;
+   gr->is_imported = true;
+}
+
 int
 vrend_renderer_pipe_resource_set_type(struct vrend_context *ctx,
                                       uint32_t res_id,
                                       const struct vrend_renderer_resource_set_type_args *args)
 {
    struct virgl_resource *res = NULL;
+   struct vrend_resource *gr;
 
    /* look up the untyped resource */
    if (ctx->untyped_resource_cache &&
@@ -13398,11 +13447,26 @@ vrend_renderer_pipe_resource_set_type(struct vrend_context *ctx,
 
    /* either a bad res_id or the resource is already typed */
    if (!res) {
-      if (vrend_renderer_ctx_res_lookup(ctx, res_id))
-         return 0;
+      gr = vrend_renderer_ctx_res_lookup(ctx, res_id);
 
-      vrend_report_context_error(ctx, VIRGL_ERROR_CTX_ILLEGAL_RESOURCE, res_id);
-      return EINVAL;
+      if (!gr) {
+         vrend_report_context_error(ctx, VIRGL_ERROR_CTX_ILLEGAL_RESOURCE, res_id);
+         return EINVAL;
+      }
+#if defined(HAVE_EPOXY_EGL_H) && defined(ENABLE_GBM_ALLOCATION)
+      /* import pipe_resource from gbm_bo */
+      if (gr->gbm_bo) {
+         res = virgl_resource_lookup(res_id);
+         if (!res || !(res->pipe_resource->bind &VIRGL_RES_BIND_LINEAR) || !(res->pipe_resource->bind & VIRGL_RES_BIND_SCANOUT))
+            return 0;
+         int fd = gbm_bo_get_fd(gr->gbm_bo);
+         if (fd < 0 || res->map_size == 0 || !has_feature(feat_memory_object_fd) || !has_feature(feat_memory_object)) {
+            return EINVAL;
+         }
+         vrend_renderer_pipe_resource_from_fd(gr, args->width, args->height, res->map_size, fd);
+      }
+#endif
+      return 0;
    }
 
    /* resource is still untyped */
@@ -13419,7 +13483,6 @@ vrend_renderer_pipe_resource_set_type(struct vrend_context *ctx,
          .nr_samples = 0,
          .flags = 0,
       };
-      struct vrend_resource *gr;
 
       if (res->fd_type != VIRGL_RESOURCE_FD_DMABUF)
          return EINVAL;
@@ -13495,27 +13558,7 @@ vrend_renderer_pipe_resource_set_type(struct vrend_context *ctx,
             return EINVAL;
          }
 
-         /* Create a GL memory object importing memory from a FD */
-         GLuint mem_object;
-         glCreateMemoryObjectsEXT(1, &mem_object);
-         GLint params = GL_TRUE;
-         glMemoryObjectParameterivEXT(mem_object, GL_DEDICATED_MEMORY_OBJECT_EXT, &params);
-         glImportMemoryFdEXT(mem_object, res->map_size, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd);
-
-         struct pipe_resource *pr = &gr->base;
-         gr->target = tgsitargettogltarget(pr->target, pr->nr_samples);
-         gr->memobj = mem_object;
-         gr->storage_bits |= VREND_STORAGE_GL_TEXTURE | VREND_STORAGE_GL_MEMOBJ;
-
-         /* Create a GL texture which uses that memory as storage */
-         glGenTextures(1, &gr->gl_id);
-         glBindTexture(gr->target, gr->gl_id);
-         GLsizei width = (GLsizei)args->width;
-         GLsizei height = (GLsizei)args->height;
-         glTexParameteri(gr->target, GL_TEXTURE_TILING_EXT, GL_LINEAR_TILING_EXT);
-         glTexStorageMem2DEXT(gr->target, 1, internalformat, width, height, mem_object, 0);
-         glBindTexture(gr->target, 0);
-         gr->is_imported = true;
+         vrend_renderer_pipe_resource_from_fd(gr, args->width, args->height, res->map_size, fd);
       }
       res->pipe_resource = &gr->base;
    }
@@ -13536,6 +13579,19 @@ uint32_t vrend_renderer_resource_get_map_info(struct pipe_resource *pres)
 int vrend_renderer_resource_map(struct pipe_resource *pres, void **map, uint64_t *out_size)
 {
    struct vrend_resource *res = (struct vrend_resource *)pres;
+#if defined(HAVE_EPOXY_EGL_H) && defined(ENABLE_GBM_ALLOCATION)
+   if (has_bits(res->storage_bits, VREND_STORAGE_GBM_BUFFER) && res->gbm_bo &&
+       (pres->bind & VIRGL_RES_BIND_LINEAR) && (pres->bind & VIRGL_RES_BIND_SCANOUT)) {
+      int fd = gbm_bo_get_fd(res->gbm_bo);
+      if (fd < 0)
+         return -EINVAL;
+      *map = mmap(NULL, *out_size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+      close(fd);
+      if (*map == MAP_FAILED)
+         return -EINVAL;
+      return 0;
+   }
+#endif
    if (!has_bits(res->storage_bits, VREND_STORAGE_GL_BUFFER | VREND_STORAGE_GL_IMMUTABLE))
       return -EINVAL;
 
@@ -13549,9 +13605,15 @@ int vrend_renderer_resource_map(struct pipe_resource *pres, void **map, uint64_t
    return 0;
 }
 
-int vrend_renderer_resource_unmap(struct pipe_resource *pres)
+int vrend_renderer_resource_unmap(struct pipe_resource *pres, void *mmaped, uint64_t map_size)
 {
    struct vrend_resource *res = (struct vrend_resource *)pres;
+#if defined(HAVE_EPOXY_EGL_H) && defined(ENABLE_GBM_ALLOCATION)
+   if (has_bits(res->storage_bits, VREND_STORAGE_GBM_BUFFER) && res->gbm_bo &&
+       (pres->bind & VIRGL_RES_BIND_LINEAR) && (pres->bind & VIRGL_RES_BIND_SCANOUT)) {
+      return munmap(mmaped, map_size);
+   }
+#endif
    if (!has_bits(res->storage_bits, VREND_STORAGE_GL_BUFFER | VREND_STORAGE_GL_IMMUTABLE))
       return -EINVAL;
 
