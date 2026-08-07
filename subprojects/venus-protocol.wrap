@@ -1,7 +1,7 @@
 [wrap-git]
-directory = venus-protocol-1.1
-url = https://gitlab.freedesktop.org/virgl/venus-protocol.git
-revision = e94b12f301b9eb27ebead757128a18420b4f7994
+directory = venus-protocol-1.2
+url = https://gitlab.freedesktop.org/zzyiwei/venus-protocol.git
+revision = d94a0bfa120d0b3fb2ab59db168fdeb44100f598
 depth = 1
 
 [provide]
