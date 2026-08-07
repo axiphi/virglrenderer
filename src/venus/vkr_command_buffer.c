@@ -1282,6 +1282,22 @@ vkr_dispatch_vkCmdSetPrimitiveRestartIndexEXT(
    VKR_CMD_CALL(CmdSetPrimitiveRestartIndexEXT, args, args->primitiveRestartIndex);
 }
 
+static void
+vkr_dispatch_vkCmdCopyMemoryIndirectKHR(UNUSED struct vn_dispatch_context *ctx,
+                                        struct vn_command_vkCmdCopyMemoryIndirectKHR *args)
+{
+   VKR_CMD_CALL(CmdCopyMemoryIndirectKHR, args, args->pCopyMemoryIndirectInfo);
+}
+
+static void
+vkr_dispatch_vkCmdCopyMemoryToImageIndirectKHR(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdCopyMemoryToImageIndirectKHR *args)
+{
+   VKR_CMD_CALL(CmdCopyMemoryToImageIndirectKHR, args,
+                args->pCopyMemoryToImageIndirectInfo);
+}
+
 void
 vkr_context_init_command_pool_dispatch(struct vkr_context *ctx)
 {
@@ -1549,4 +1565,10 @@ vkr_context_init_command_buffer_dispatch(struct vkr_context *ctx)
    /* VK_EXT_primitive_restart_index */
    dispatch->dispatch_vkCmdSetPrimitiveRestartIndexEXT =
       vkr_dispatch_vkCmdSetPrimitiveRestartIndexEXT;
+
+   /* VK_KHR_copy_memory_indirect */
+   dispatch->dispatch_vkCmdCopyMemoryIndirectKHR =
+      vkr_dispatch_vkCmdCopyMemoryIndirectKHR;
+   dispatch->dispatch_vkCmdCopyMemoryToImageIndirectKHR =
+      vkr_dispatch_vkCmdCopyMemoryToImageIndirectKHR;
 }
