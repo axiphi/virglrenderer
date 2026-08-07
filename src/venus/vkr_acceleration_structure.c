@@ -66,6 +66,14 @@ vkr_dispatch_vkGetDeviceAccelerationStructureCompatibilityKHR(
                                                       args->pCompatibility);
 }
 
+static void
+vkr_dispatch_vkCreateAccelerationStructure2KHR(
+   UNUSED struct vn_dispatch_context *dispatch,
+   struct vn_command_vkCreateAccelerationStructure2KHR *args)
+{
+   vkr_acceleration_structure_2_create_and_add(dispatch->data, args);
+}
+
 void
 vkr_context_init_acceleration_structure_dispatch(struct vkr_context *ctx)
 {
@@ -87,4 +95,10 @@ vkr_context_init_acceleration_structure_dispatch(struct vkr_context *ctx)
    dispatch->dispatch_vkCopyAccelerationStructureToMemoryKHR = NULL;
    dispatch->dispatch_vkCopyMemoryToAccelerationStructureKHR = NULL;
    dispatch->dispatch_vkWriteAccelerationStructuresPropertiesKHR = NULL;
+
+   /* VK_KHR_device_address_commands
+    * depends: VK_KHR_acceleration_structure
+    */
+   dispatch->dispatch_vkCreateAccelerationStructure2KHR =
+      vkr_dispatch_vkCreateAccelerationStructure2KHR;
 }

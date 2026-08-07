@@ -328,11 +328,18 @@
                 "vk_type": "VkAccelerationStructureKHR",
                 "vk_enum": "VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR",
                 "generator": "simple-object",
+                "create_func_name": "acceleration_structure",
                 "create_cmd": "vkCreateAccelerationStructureKHR",
                 "create_info": "pCreateInfo",
                 "create_obj": "pAccelerationStructure",
                 "destroy_cmd": "vkDestroyAccelerationStructureKHR",
-                "destroy_obj": "accelerationStructure"
+                "destroy_obj": "accelerationStructure",
+                "variants": [
+                    {
+                        "create_func_name": "acceleration_structure_2",
+                        "create_cmd": "vkCreateAccelerationStructure2KHR"
+                    }
+                ]
             }
         ]
     }
