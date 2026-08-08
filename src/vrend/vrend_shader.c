@@ -1438,7 +1438,7 @@ iter_declaration(struct tgsi_iterate_context *iter,
                      ctx->inputs[k].sid = 0;
                      ctx->inputs[k].interpolate = TGSI_INTERPOLATE_CONSTANT;
                      ctx->inputs[k].location = TGSI_INTERPOLATE_LOC_CENTER;
-                     ctx->inputs[k].first = 0;
+                     ctx->inputs[k].first = UINT16_MAX;
                      ctx->inputs[k].override_no_wm = false;
                      ctx->inputs[k].glsl_predefined_no_emit = true;
                      ctx->inputs[k].glsl_no_index = true;
