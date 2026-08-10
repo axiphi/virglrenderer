@@ -118,6 +118,7 @@ static const struct vn_info_extension_table vkr_extension_table = {
    .KHR_deferred_host_operations = false, /* implementation in driver */
    .KHR_depth_clamp_zero_one = true,
    .KHR_device_address_commands = true,
+   .KHR_extended_flags = true,
    .KHR_external_fence_fd = true,
    .KHR_external_memory_fd = true,
    .KHR_external_semaphore_fd = true,
