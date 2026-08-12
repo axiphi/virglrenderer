@@ -1282,6 +1282,181 @@ vkr_dispatch_vkCmdSetPrimitiveRestartIndexEXT(
    VKR_CMD_CALL(CmdSetPrimitiveRestartIndexEXT, args, args->primitiveRestartIndex);
 }
 
+static void
+vkr_dispatch_vkCmdCopyMemoryIndirectKHR(UNUSED struct vn_dispatch_context *ctx,
+                                        struct vn_command_vkCmdCopyMemoryIndirectKHR *args)
+{
+   VKR_CMD_CALL(CmdCopyMemoryIndirectKHR, args, args->pCopyMemoryIndirectInfo);
+}
+
+static void
+vkr_dispatch_vkCmdCopyMemoryToImageIndirectKHR(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdCopyMemoryToImageIndirectKHR *args)
+{
+   VKR_CMD_CALL(CmdCopyMemoryToImageIndirectKHR, args,
+                args->pCopyMemoryToImageIndirectInfo);
+}
+
+static void
+vkr_dispatch_vkCmdBindIndexBuffer3KHR(UNUSED struct vn_dispatch_context *ctx,
+                                      struct vn_command_vkCmdBindIndexBuffer3KHR *args)
+{
+   VKR_CMD_CALL(CmdBindIndexBuffer3KHR, args, args->pInfo);
+}
+
+static void
+vkr_dispatch_vkCmdBindVertexBuffers3KHR(UNUSED struct vn_dispatch_context *ctx,
+                                        struct vn_command_vkCmdBindVertexBuffers3KHR *args)
+{
+   VKR_CMD_CALL(CmdBindVertexBuffers3KHR, args, args->firstBinding, args->bindingCount,
+                args->pBindingInfos);
+}
+
+static void
+vkr_dispatch_vkCmdCopyImageToMemoryKHR(UNUSED struct vn_dispatch_context *ctx,
+                                       struct vn_command_vkCmdCopyImageToMemoryKHR *args)
+{
+   VKR_CMD_CALL(CmdCopyImageToMemoryKHR, args, args->pCopyMemoryInfo);
+}
+
+static void
+vkr_dispatch_vkCmdCopyMemoryKHR(UNUSED struct vn_dispatch_context *ctx,
+                                struct vn_command_vkCmdCopyMemoryKHR *args)
+{
+   VKR_CMD_CALL(CmdCopyMemoryKHR, args, args->pCopyMemoryInfo);
+}
+
+static void
+vkr_dispatch_vkCmdCopyMemoryToImageKHR(UNUSED struct vn_dispatch_context *ctx,
+                                       struct vn_command_vkCmdCopyMemoryToImageKHR *args)
+{
+   VKR_CMD_CALL(CmdCopyMemoryToImageKHR, args, args->pCopyMemoryInfo);
+}
+
+static void
+vkr_dispatch_vkCmdCopyQueryPoolResultsToMemoryKHR(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdCopyQueryPoolResultsToMemoryKHR *args)
+{
+   VKR_CMD_CALL(CmdCopyQueryPoolResultsToMemoryKHR, args, args->queryPool,
+                args->firstQuery, args->queryCount, args->pDstRange, args->dstFlags,
+                args->queryResultFlags);
+}
+
+static void
+vkr_dispatch_vkCmdDispatchIndirect2KHR(UNUSED struct vn_dispatch_context *ctx,
+                                       struct vn_command_vkCmdDispatchIndirect2KHR *args)
+{
+   VKR_CMD_CALL(CmdDispatchIndirect2KHR, args, args->pInfo);
+}
+
+static void
+vkr_dispatch_vkCmdDrawIndexedIndirect2KHR(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdDrawIndexedIndirect2KHR *args)
+{
+   VKR_CMD_CALL(CmdDrawIndexedIndirect2KHR, args, args->pInfo);
+}
+
+static void
+vkr_dispatch_vkCmdDrawIndirect2KHR(UNUSED struct vn_dispatch_context *ctx,
+                                   struct vn_command_vkCmdDrawIndirect2KHR *args)
+{
+   VKR_CMD_CALL(CmdDrawIndirect2KHR, args, args->pInfo);
+}
+
+static void
+vkr_dispatch_vkCmdFillMemoryKHR(UNUSED struct vn_dispatch_context *ctx,
+                                struct vn_command_vkCmdFillMemoryKHR *args)
+{
+   VKR_CMD_CALL(CmdFillMemoryKHR, args, args->pDstRange, args->dstFlags, args->data);
+}
+
+static void
+vkr_dispatch_vkCmdUpdateMemoryKHR(UNUSED struct vn_dispatch_context *ctx,
+                                  struct vn_command_vkCmdUpdateMemoryKHR *args)
+{
+   VKR_CMD_CALL(CmdUpdateMemoryKHR, args, args->pDstRange, args->dstFlags, args->dataSize,
+                args->pData);
+}
+
+static void
+vkr_dispatch_vkCmdBeginConditionalRendering2EXT(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdBeginConditionalRendering2EXT *args)
+{
+   VKR_CMD_CALL(CmdBeginConditionalRendering2EXT, args, args->pConditionalRenderingBegin);
+}
+
+static void
+vkr_dispatch_vkCmdDrawMeshTasksIndirect2EXT(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdDrawMeshTasksIndirect2EXT *args)
+{
+   VKR_CMD_CALL(CmdDrawMeshTasksIndirect2EXT, args, args->pInfo);
+}
+
+static void
+vkr_dispatch_vkCmdDrawMeshTasksIndirectCount2EXT(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdDrawMeshTasksIndirectCount2EXT *args)
+{
+   VKR_CMD_CALL(CmdDrawMeshTasksIndirectCount2EXT, args, args->pInfo);
+}
+
+static void
+vkr_dispatch_vkCmdDrawIndexedIndirectCount2KHR(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdDrawIndexedIndirectCount2KHR *args)
+{
+   VKR_CMD_CALL(CmdDrawIndexedIndirectCount2KHR, args, args->pInfo);
+}
+
+static void
+vkr_dispatch_vkCmdDrawIndirectCount2KHR(UNUSED struct vn_dispatch_context *ctx,
+                                        struct vn_command_vkCmdDrawIndirectCount2KHR *args)
+{
+   VKR_CMD_CALL(CmdDrawIndirectCount2KHR, args, args->pInfo);
+}
+
+static void
+vkr_dispatch_vkCmdBeginTransformFeedback2EXT(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdBeginTransformFeedback2EXT *args)
+{
+   VKR_CMD_CALL(CmdBeginTransformFeedback2EXT, args, args->firstCounterRange,
+                args->counterRangeCount, args->pCounterInfos);
+}
+
+static void
+vkr_dispatch_vkCmdBindTransformFeedbackBuffers2EXT(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdBindTransformFeedbackBuffers2EXT *args)
+{
+   VKR_CMD_CALL(CmdBindTransformFeedbackBuffers2EXT, args, args->firstBinding,
+                args->bindingCount, args->pBindingInfos);
+}
+
+static void
+vkr_dispatch_vkCmdDrawIndirectByteCount2EXT(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdDrawIndirectByteCount2EXT *args)
+{
+   VKR_CMD_CALL(CmdDrawIndirectByteCount2EXT, args, args->instanceCount,
+                args->firstInstance, args->pCounterInfo, args->counterOffset,
+                args->vertexStride);
+}
+
+static void
+vkr_dispatch_vkCmdEndTransformFeedback2EXT(
+   UNUSED struct vn_dispatch_context *ctx,
+   struct vn_command_vkCmdEndTransformFeedback2EXT *args)
+{
+   VKR_CMD_CALL(CmdEndTransformFeedback2EXT, args, args->firstCounterRange,
+                args->counterRangeCount, args->pCounterInfos);
+}
+
 void
 vkr_context_init_command_pool_dispatch(struct vkr_context *ctx)
 {
@@ -1549,4 +1724,64 @@ vkr_context_init_command_buffer_dispatch(struct vkr_context *ctx)
    /* VK_EXT_primitive_restart_index */
    dispatch->dispatch_vkCmdSetPrimitiveRestartIndexEXT =
       vkr_dispatch_vkCmdSetPrimitiveRestartIndexEXT;
+
+   /* VK_KHR_copy_memory_indirect */
+   dispatch->dispatch_vkCmdCopyMemoryIndirectKHR =
+      vkr_dispatch_vkCmdCopyMemoryIndirectKHR;
+   dispatch->dispatch_vkCmdCopyMemoryToImageIndirectKHR =
+      vkr_dispatch_vkCmdCopyMemoryToImageIndirectKHR;
+
+   /* VK_KHR_device_address_commands */
+   dispatch->dispatch_vkCmdBindIndexBuffer3KHR = vkr_dispatch_vkCmdBindIndexBuffer3KHR;
+   dispatch->dispatch_vkCmdBindVertexBuffers3KHR =
+      vkr_dispatch_vkCmdBindVertexBuffers3KHR;
+   dispatch->dispatch_vkCmdCopyImageToMemoryKHR = vkr_dispatch_vkCmdCopyImageToMemoryKHR;
+   dispatch->dispatch_vkCmdCopyMemoryKHR = vkr_dispatch_vkCmdCopyMemoryKHR;
+   dispatch->dispatch_vkCmdCopyMemoryToImageKHR = vkr_dispatch_vkCmdCopyMemoryToImageKHR;
+   dispatch->dispatch_vkCmdCopyQueryPoolResultsToMemoryKHR =
+      vkr_dispatch_vkCmdCopyQueryPoolResultsToMemoryKHR;
+   dispatch->dispatch_vkCmdDispatchIndirect2KHR = vkr_dispatch_vkCmdDispatchIndirect2KHR;
+   dispatch->dispatch_vkCmdDrawIndexedIndirect2KHR =
+      vkr_dispatch_vkCmdDrawIndexedIndirect2KHR;
+   dispatch->dispatch_vkCmdDrawIndirect2KHR = vkr_dispatch_vkCmdDrawIndirect2KHR;
+   dispatch->dispatch_vkCmdFillMemoryKHR = vkr_dispatch_vkCmdFillMemoryKHR;
+   dispatch->dispatch_vkCmdUpdateMemoryKHR = vkr_dispatch_vkCmdUpdateMemoryKHR;
+
+   /* VK_KHR_device_address_commands
+    * depends: VK_EXT_conditional_rendering
+    */
+   dispatch->dispatch_vkCmdBeginConditionalRendering2EXT =
+      vkr_dispatch_vkCmdBeginConditionalRendering2EXT;
+
+   /* VK_KHR_device_address_commands
+    * depends: VK_EXT_mesh_shader
+    */
+   dispatch->dispatch_vkCmdDrawMeshTasksIndirect2EXT =
+      vkr_dispatch_vkCmdDrawMeshTasksIndirect2EXT;
+
+   /* VK_KHR_device_address_commands
+    * depends: (VK_KHR_draw_indirect_count,VK_VERSION_1_2)+VK_EXT_mesh_shader
+    */
+   dispatch->dispatch_vkCmdDrawMeshTasksIndirectCount2EXT =
+      vkr_dispatch_vkCmdDrawMeshTasksIndirectCount2EXT;
+
+   /* VK_KHR_device_address_commands
+    * depends: VK_KHR_draw_indirect_count,VK_VERSION_1_2
+    */
+   dispatch->dispatch_vkCmdDrawIndexedIndirectCount2KHR =
+      vkr_dispatch_vkCmdDrawIndexedIndirectCount2KHR;
+   dispatch->dispatch_vkCmdDrawIndirectCount2KHR =
+      vkr_dispatch_vkCmdDrawIndirectCount2KHR;
+
+   /* VK_KHR_device_address_commands
+    * depends: VK_EXT_transform_feedback
+    */
+   dispatch->dispatch_vkCmdBeginTransformFeedback2EXT =
+      vkr_dispatch_vkCmdBeginTransformFeedback2EXT;
+   dispatch->dispatch_vkCmdBindTransformFeedbackBuffers2EXT =
+      vkr_dispatch_vkCmdBindTransformFeedbackBuffers2EXT;
+   dispatch->dispatch_vkCmdDrawIndirectByteCount2EXT =
+      vkr_dispatch_vkCmdDrawIndirectByteCount2EXT;
+   dispatch->dispatch_vkCmdEndTransformFeedback2EXT =
+      vkr_dispatch_vkCmdEndTransformFeedback2EXT;
 }

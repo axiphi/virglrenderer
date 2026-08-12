@@ -301,11 +301,18 @@
                 "vk_type": "VkRenderPass",
                 "vk_enum": "VK_OBJECT_TYPE_RENDER_PASS",
                 "generator": "simple-object",
+                "create_func_name": "render_pass",
                 "create_cmd": "vkCreateRenderPass",
                 "create_info": "pCreateInfo",
                 "create_obj": "pRenderPass",
                 "destroy_cmd": "vkDestroyRenderPass",
-                "destroy_obj": "renderPass"
+                "destroy_obj": "renderPass",
+                "variants": [
+                    {
+                        "create_func_name": "render_pass_2",
+                        "create_cmd": "vkCreateRenderPass2"
+                    }
+                ]
             },
             {
                 "vkr_type": "framebuffer",
@@ -328,11 +335,18 @@
                 "vk_type": "VkAccelerationStructureKHR",
                 "vk_enum": "VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR",
                 "generator": "simple-object",
+                "create_func_name": "acceleration_structure",
                 "create_cmd": "vkCreateAccelerationStructureKHR",
                 "create_info": "pCreateInfo",
                 "create_obj": "pAccelerationStructure",
                 "destroy_cmd": "vkDestroyAccelerationStructureKHR",
-                "destroy_obj": "accelerationStructure"
+                "destroy_obj": "accelerationStructure",
+                "variants": [
+                    {
+                        "create_func_name": "acceleration_structure_2",
+                        "create_cmd": "vkCreateAccelerationStructure2KHR"
+                    }
+                ]
             }
         ]
     }
