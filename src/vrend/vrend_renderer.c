@@ -8604,16 +8604,21 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
 #if defined(HAVE_EPOXY_EGL_H) && defined(ENABLE_GBM_ALLOCATION)
    uint32_t gbm_flags = virgl_gbm_convert_flags(gr->base.bind);
    uint32_t gbm_format = 0;
-   if (virgl_gbm_convert_format(&format, &gbm_format))
+   if (virgl_gbm_convert_format(&format, &gbm_format)) {
+      virgl_info("%s: unsupported format %u bind=0x%x\n", __func__, format, gr->base.bind);
       return;
+   }
    if (vrend_winsys_different_gpu())
       gbm_flags |= GBM_BO_USE_LINEAR;
 
    if (gr->base.depth0 != 1 || gr->base.last_level != 0 || gr->base.nr_samples > 1)
       return;
 
-   if (!gbm || !gbm->device || !gbm_format || !gbm_flags)
+   if (!gbm || !gbm->device || !gbm_format || !gbm_flags) {
+      virgl_info("%s: !gbm=%d !gbm->device=%d !gbm_format=%d !gbm_flags=%d\n", __func__,
+         !gbm, !gbm->device, !gbm_format, !gbm_flags);
       return;
+   }
 
    if (!virgl_gbm_external_allocation_preferred(gr->base.bind))
       return;
@@ -8627,8 +8632,11 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
       return;
 #endif
 
-   if (!gbm_device_is_format_supported(gbm->device, gbm_format, gbm_flags))
+   if (!gbm_device_is_format_supported(gbm->device, gbm_format, gbm_flags)) {
+      virgl_info("%s: gbm_device_is_format_supported: format=%u bind=0x%x\n",
+         __func__, format, gr->base.bind);
       return;
+   }
 
    struct gbm_bo *bo;
 
@@ -8644,8 +8652,12 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
 
       gr->gbm_direct_transfer = true;
    }
-   if (!bo)
+   if (!bo) {
+      virgl_error("%s: %s failed: %ux%u format=%u bind=0x%x\n",  __func__,
+         gr->gbm_direct_transfer ? "gbm_bo_create" : "vrend_vk_gbm_bo_create",
+         gr->base.width0, gr->base.height0, format, gr->base.bind);
       return;
+   }
 
    gr->gbm_bo = bo;
    gr->storage_bits |= VREND_STORAGE_GBM_BUFFER;

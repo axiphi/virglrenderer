@@ -331,6 +331,8 @@ int virgl_gbm_convert_format(uint32_t *virgl_format, uint32_t *gbm_format)
       }
     }
 
+    virgl_debug("%s: missing conversion: virgl_format=%u gbm_format=0x%x\n",
+      __func__, *virgl_format, *gbm_format);
     return -1;
 }
 
@@ -464,6 +466,10 @@ uint32_t virgl_gbm_convert_flags(uint32_t virgl_bind_flags)
          flags |= GBM_BO_USE_SW_WRITE_RARELY;
    }
 
+   if (virgl_bind_flags == 0 || flags == 0) {
+      virgl_info("%s: unhandled gbm flags: virgl_bind_flags=0x%x gbm_flags=0x%x\n",
+         __func__, virgl_bind_flags, flags);
+   }
    return flags;
 }
 
