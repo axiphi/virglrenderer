@@ -230,6 +230,38 @@ START_TEST(iov_up_and_download_r8g8b8a8_unorm)
 }
 END_TEST
 
+START_TEST(iov_up_and_download_r10g10b10a2_unorm)
+{
+   const uint32_t values[4] = {128, 10, 192, 112};
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   iov_up_and_download(PIPE_FORMAT_R10G10B10A2_UNORM, bind, values);
+}
+END_TEST
+
+START_TEST(iov_up_and_download_r10g10b10x2_unorm)
+{
+   const uint32_t values[4] = {128, 10, 192, 255};
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   iov_up_and_download(PIPE_FORMAT_R10G10B10X2_UNORM, bind, values);
+}
+END_TEST
+
+START_TEST(iov_up_and_download_b10g10r10a2_unorm)
+{
+   const uint32_t values[4] = {128, 10, 192, 112};
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   iov_up_and_download(PIPE_FORMAT_B10G10R10A2_UNORM, bind, values);
+}
+END_TEST
+
+START_TEST(iov_up_and_download_b10g10r10x2_unorm)
+{
+   const uint32_t values[4] = {128, 10, 192, 255};
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   iov_up_and_download(PIPE_FORMAT_B10G10R10X2_UNORM, bind, values);
+}
+END_TEST
+
 START_TEST(iov_up_and_download_r16g16b16x16_float)
 {
     const uint32_t values[4] = {0x3880, 0x3900, 0x3a00, 0x3c00};
@@ -238,6 +270,13 @@ START_TEST(iov_up_and_download_r16g16b16x16_float)
 }
 END_TEST
 
+START_TEST(iov_up_and_download_r16g16b16a16_float)
+{
+    const uint32_t values[4] = {0x3880, 0x3900, 0x3a00, 0x3c00};
+    uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+    iov_up_and_download(PIPE_FORMAT_R16G16B16A16_FLOAT, bind, values);
+}
+END_TEST
 
 enum test_gbm_method {
    ALWAYS_TRY_GBM,
@@ -374,6 +413,34 @@ START_TEST(transfer_up_and_download_r8g8b8x8_unorm)
 }
 END_TEST
 
+START_TEST(transfer_up_and_download_r10g10b10a2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R10G10B10A2_UNORM, bind, ALWAYS_TRY_GBM);
+}
+END_TEST
+
+START_TEST(transfer_up_and_download_r10g10b10x2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R10G10B10X2_UNORM, bind, ALWAYS_TRY_GBM);
+}
+END_TEST
+
+START_TEST(transfer_up_and_download_b10g10r10a2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_B10G10R10A2_UNORM, bind, ALWAYS_TRY_GBM);
+}
+END_TEST
+
+START_TEST(transfer_up_and_download_b10g10r10x2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_B10G10R10X2_UNORM, bind, ALWAYS_TRY_GBM);
+}
+END_TEST
+
 START_TEST(transfer_gl_up_gbm_download_b8g8r8a8_unorm)
 {
    uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
@@ -400,6 +467,35 @@ START_TEST(transfer_gl_up_gbm_download_r8g8b8x8_unorm)
 {
    uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
    staging_transfer_up_and_download(PIPE_FORMAT_R8G8B8X8_UNORM, bind, UPLOAD_USE_GL);
+}
+END_TEST
+
+
+START_TEST(transfer_gl_up_gbm_download_r10g10b10a2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R10G10B10A2_UNORM, bind, UPLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gl_up_gbm_download_r10g10b10x2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R10G10B10X2_UNORM, bind, UPLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gl_up_gbm_download_b10g10r10a2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_B10G10R10A2_UNORM, bind, UPLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gl_up_gbm_download_b10g10r10x2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_B10G10R10X2_UNORM, bind, UPLOAD_USE_GL);
 }
 END_TEST
 
@@ -433,6 +529,36 @@ START_TEST(transfer_gbm_up_gl_download_r8g8b8x8_unorm)
 }
 END_TEST
 
+
+START_TEST(transfer_gbm_up_gl_download_r10g10b10a2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R10G10B10A2_UNORM, bind, DOWNLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gbm_up_gl_download_r10g10b10x2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R10G10B10X2_UNORM, bind, DOWNLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gbm_up_gl_download_b10g10r10a2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_B10G10R10A2_UNORM, bind, DOWNLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gbm_up_gl_download_b10g10r10x2_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_B10G10R10X2_UNORM, bind, DOWNLOAD_USE_GL);
+}
+END_TEST
+
+
 START_TEST(transfer_up_and_download_r16g16b16x16_float)
 {
     uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
@@ -451,6 +577,27 @@ START_TEST(transfer_gbm_up_gl_download_r16g16b16x16_float)
 {
     uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
     staging_transfer_up_and_download(PIPE_FORMAT_R16G16B16X16_FLOAT, bind, DOWNLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_up_and_download_r16g16b16a16_float)
+{
+    uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+    staging_transfer_up_and_download(PIPE_FORMAT_R16G16B16A16_FLOAT, bind, ALWAYS_TRY_GBM);
+}
+END_TEST
+
+START_TEST(transfer_gl_up_gbm_download_r16g16b16a16_float)
+{
+    uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+    staging_transfer_up_and_download(PIPE_FORMAT_R16G16B16A16_FLOAT, bind, UPLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gbm_up_gl_download_r16g16b16a16_float)
+{
+    uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+    staging_transfer_up_and_download(PIPE_FORMAT_R16G16B16A16_FLOAT, bind, DOWNLOAD_USE_GL);
 }
 END_TEST
 
@@ -586,6 +733,46 @@ START_TEST(gbm_clear_and_download_r8g8b8a8)
 }
 END_TEST
 
+START_TEST(gbm_clear_and_download_r10g10b10a2)
+{
+   const uint8_t clear_color[4] = {
+       128, 64, 192, 32
+   };
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   gbm_clear_and_download(PIPE_FORMAT_R10G10B10A2_UNORM, bind, clear_color);
+}
+END_TEST
+
+START_TEST(gbm_clear_and_download_r10g10b10x2)
+{
+   const uint8_t clear_color[4] = {
+       128, 64, 192, 255
+   };
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   gbm_clear_and_download(PIPE_FORMAT_R10G10B10X2_UNORM, bind, clear_color);
+}
+END_TEST
+
+START_TEST(gbm_clear_and_download_b10g10r10a2)
+{
+   const uint8_t clear_color[4] = {
+       128, 64, 192, 32
+   };
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   gbm_clear_and_download(PIPE_FORMAT_B10G10R10A2_UNORM, bind, clear_color);
+}
+END_TEST
+
+START_TEST(gbm_clear_and_download_b10g10r10x2)
+{
+   const uint8_t clear_color[4] = {
+       128, 64, 192, 255
+   };
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   gbm_clear_and_download(PIPE_FORMAT_B10G10R10X2_UNORM, bind, clear_color);
+}
+END_TEST
+
 static Suite *virgl_init_suite(void)
 {
    Suite *s = suite_create("virgl_gbm");
@@ -595,31 +782,55 @@ static Suite *virgl_init_suite(void)
    tcase_add_test(tc_gbm_rw, iov_up_and_download_b8g8r8a8_unorm);
    tcase_add_test(tc_gbm_rw, iov_up_and_download_r8g8b8x8_unorm);
    tcase_add_test(tc_gbm_rw, iov_up_and_download_r8g8b8a8_unorm);
+   tcase_add_test(tc_gbm_rw, iov_up_and_download_r10g10b10a2_unorm);
+   tcase_add_test(tc_gbm_rw, iov_up_and_download_r10g10b10x2_unorm);
+   tcase_add_test(tc_gbm_rw, iov_up_and_download_b10g10r10a2_unorm);
+   tcase_add_test(tc_gbm_rw, iov_up_and_download_b10g10r10x2_unorm);
 
    tcase_add_test(tc_gbm_rw, transfer_up_and_download_b8g8r8a8_unorm);
    tcase_add_test(tc_gbm_rw, transfer_up_and_download_b8g8r8x8_unorm);
    tcase_add_test(tc_gbm_rw, transfer_up_and_download_r8g8b8a8_unorm);
    tcase_add_test(tc_gbm_rw, transfer_up_and_download_r8g8b8x8_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_up_and_download_r10g10b10a2_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_up_and_download_r10g10b10x2_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_up_and_download_b10g10r10a2_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_up_and_download_b10g10r10x2_unorm);
 
    tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_b8g8r8a8_unorm);
    tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_r8g8b8a8_unorm);
    tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_b8g8r8x8_unorm);
    tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_r8g8b8x8_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_r10g10b10a2_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_r10g10b10x2_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_b10g10r10a2_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_b10g10r10x2_unorm);
 
    tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_b8g8r8a8_unorm);
    tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_r8g8b8a8_unorm);
    tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_b8g8r8x8_unorm);
    tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_r8g8b8x8_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_r10g10b10a2_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_r10g10b10x2_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_b10g10r10a2_unorm);
+   tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_b10g10r10x2_unorm);
 
    tcase_add_test(tc_gbm_rw, gbm_clear_and_download_b8g8r8x8);
    tcase_add_test(tc_gbm_rw, gbm_clear_and_download_b8g8r8a8);
    tcase_add_test(tc_gbm_rw, gbm_clear_and_download_r8g8b8x8);
    tcase_add_test(tc_gbm_rw, gbm_clear_and_download_r8g8b8a8);
+   tcase_add_test(tc_gbm_rw, gbm_clear_and_download_r10g10b10a2);
+   tcase_add_test(tc_gbm_rw, gbm_clear_and_download_r10g10b10x2);
+   tcase_add_test(tc_gbm_rw, gbm_clear_and_download_b10g10r10a2);
+   tcase_add_test(tc_gbm_rw, gbm_clear_and_download_b10g10r10x2);
 
    tcase_add_test(tc_gbm_rw, iov_up_and_download_r16g16b16x16_float);
    tcase_add_test(tc_gbm_rw, transfer_up_and_download_r16g16b16x16_float);
    tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_r16g16b16x16_float);
    tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_r16g16b16x16_float);
+   tcase_add_test(tc_gbm_rw, iov_up_and_download_r16g16b16a16_float);
+   tcase_add_test(tc_gbm_rw, transfer_up_and_download_r16g16b16a16_float);
+   tcase_add_test(tc_gbm_rw, transfer_gl_up_gbm_download_r16g16b16a16_float);
+   tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_r16g16b16a16_float);
 
    suite_add_tcase(s, tc_gbm_rw);
    return s;
