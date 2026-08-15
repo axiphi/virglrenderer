@@ -197,6 +197,7 @@ static const struct planar_layout *layout_from_format(uint32_t format)
    case GBM_FORMAT_ABGR2101010:
       return &packed_4bpp_layout;
    case GBM_FORMAT_ABGR16161616F:
+   case GBM_FORMAT_XBGR16161616F:
       return &packed_8bpp_layout;
    default:
       return NULL;
