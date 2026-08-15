@@ -537,7 +537,7 @@ vrend_vk_gbm_bo_create(struct gbm_device *gbm_dev, uint32_t width, uint32_t heig
                         " gbm_format=0x%08x %ux%u\n",
                     __func__, mod, gbm_format, width, height);
     } else {
-        virgl_debug("%s: unsupported gbm_format=0x%08x\n", __func__, gbm_format);
+        virgl_info("%s: unsupported gbm_format=0x%08x\n", __func__, gbm_format);
     }
 
     return NULL;

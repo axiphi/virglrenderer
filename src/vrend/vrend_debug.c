@@ -216,3 +216,20 @@ int  vrend_debug_can_override(void)
 {
    return vrend_debug_flags & dbg_allow_guest_override;
 }
+
+const char *vrend_debug_glerror_string(uint32_t glerror)
+{
+   switch (glerror) {
+#define CASE(e) case e: return #e;
+   CASE(GL_INVALID_ENUM)
+   CASE(GL_INVALID_VALUE)
+   CASE(GL_INVALID_OPERATION)
+   CASE(GL_INVALID_FRAMEBUFFER_OPERATION)
+   CASE(GL_OUT_OF_MEMORY)
+   CASE(GL_STACK_UNDERFLOW)
+   CASE(GL_STACK_OVERFLOW)
+   CASE(GL_NO_ERROR)
+#undef CASE
+   default: return "";
+   }
+}

@@ -1121,6 +1121,7 @@ static const char *vrend_ctx_error_strings[] = {
    [VIRGL_ERROR_CTX_BLIT_AREA_OUT_OF_RANGE] = "Blit z-slices out of range;",
    [VIRGL_ERROR_CTX_SSBO_BINDING_RANGE] = "SSBO binding out of range for resource",
    [VIRGL_ERROR_CTX_RESOURCE_OUT_OF_RANGE] = "Resource copy out of range for resource",
+   [VIRGL_ERROR_CTX_CHECK_NO_ERROR] = "glGetError returns",
 };
 
 void vrend_report_context_error_internal(const char *fname, struct vrend_context *ctx,
@@ -1128,9 +1129,9 @@ void vrend_report_context_error_internal(const char *fname, struct vrend_context
 {
    ctx->in_error = true;
    ctx->last_error = error;
-   virgl_error("%s: context error reported %d \"%s\" %s %d\n", fname,
+   virgl_error("%s: context error reported %d \"%s\" %s %d %s\n", fname,
                ctx->ctx_id, ctx->debug_name, vrend_ctx_error_strings[error],
-               value);
+               value, vrend_debug_glerror_string(value));
 }
 
 #define CORE_PROFILE_WARN_NONE 0
@@ -2933,11 +2934,12 @@ static void vrend_framebuffer_texture_2d(struct vrend_resource *res,
 }
 
 static
-void debug_texture(ASSERTED const char *f, const struct vrend_resource *gt)
+void debug_texture(ASSERTED const char *f, const struct vrend_context *ctx,
+   const struct vrend_resource *gt)
 {
    ASSERTED const struct pipe_resource *pr = &gt->base;
 #define PRINT_TARGET(X) case X: virgl_debug( #X); break
-   VREND_DEBUG_EXT(dbg_tex, NULL,
+   VREND_DEBUG_EXT(dbg_tex, ctx,
                virgl_debug("%s: ", f);
                switch (tgsitargettogltarget(pr->target, pr->nr_samples)) {
                PRINT_TARGET(GL_TEXTURE_RECTANGLE_NV);
@@ -2967,7 +2969,7 @@ void vrend_fb_bind_texture_id(struct vrend_resource *res,
    const struct util_format_description *desc = util_format_description(res->base.format);
    GLenum attachment = GL_COLOR_ATTACHMENT0 + idx;
 
-   debug_texture(__func__, res);
+   debug_texture(__func__, NULL, res);
 
    if (vrend_format_is_ds(res->base.format)) {
       if (util_format_has_stencil(desc)) {
@@ -5286,7 +5288,7 @@ static GLuint vrend_draw_bind_samplers_shader(struct vrend_sub_context *sub_ctx,
             GLuint id = tview->gl_id;
             GLenum target = tview->target;
 
-            debug_texture(__func__, tview->texture);
+            debug_texture(__func__, sub_ctx->parent, tview->texture);
 
             if (has_bit(tview->texture->storage_bits, VREND_STORAGE_GL_BUFFER)) {
                id = tview->texture->tbo_tex_id;
@@ -7526,7 +7528,7 @@ bool vrend_check_no_error(struct vrend_context *ctx)
 
    while (err != GL_NO_ERROR) {
 #ifdef CHECK_GL_ERRORS
-      vrend_report_context_error(ctx, VIRGL_ERROR_CTX_UNKNOWN, err);
+      vrend_report_context_error(ctx, VIRGL_ERROR_CTX_CHECK_NO_ERROR, err);
 #else
       virgl_warn("GL error reported (%d) for context %d\n", err, ctx->ctx_id);
 #endif
@@ -8602,16 +8604,21 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
 #if defined(HAVE_EPOXY_EGL_H) && defined(ENABLE_GBM_ALLOCATION)
    uint32_t gbm_flags = virgl_gbm_convert_flags(gr->base.bind);
    uint32_t gbm_format = 0;
-   if (virgl_gbm_convert_format(&format, &gbm_format))
+   if (virgl_gbm_convert_format(&format, &gbm_format)) {
+      virgl_info("%s: unsupported format %u bind=0x%x\n", __func__, format, gr->base.bind);
       return;
+   }
    if (vrend_winsys_different_gpu())
       gbm_flags |= GBM_BO_USE_LINEAR;
 
    if (gr->base.depth0 != 1 || gr->base.last_level != 0 || gr->base.nr_samples > 1)
       return;
 
-   if (!gbm || !gbm->device || !gbm_format || !gbm_flags)
+   if (!gbm || !gbm->device || !gbm_format || !gbm_flags) {
+      virgl_info("%s: !gbm=%d !gbm->device=%d !gbm_format=%d !gbm_flags=%d\n", __func__,
+         !gbm, !gbm->device, !gbm_format, !gbm_flags);
       return;
+   }
 
    if (!virgl_gbm_external_allocation_preferred(gr->base.bind))
       return;
@@ -8625,8 +8632,11 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
       return;
 #endif
 
-   if (!gbm_device_is_format_supported(gbm->device, gbm_format, gbm_flags))
+   if (!gbm_device_is_format_supported(gbm->device, gbm_format, gbm_flags)) {
+      virgl_info("%s: gbm_device_is_format_supported: format=%u bind=0x%x\n",
+         __func__, format, gr->base.bind);
       return;
+   }
 
    struct gbm_bo *bo;
 
@@ -8642,8 +8652,12 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
 
       gr->gbm_direct_transfer = true;
    }
-   if (!bo)
+   if (!bo) {
+      virgl_error("%s: %s failed: %ux%u format=%u bind=0x%x\n",  __func__,
+         gr->gbm_direct_transfer ? "gbm_bo_create" : "vrend_vk_gbm_bo_create",
+         gr->base.width0, gr->base.height0, format, gr->base.bind);
       return;
+   }
 
    gr->gbm_bo = bo;
    gr->storage_bits |= VREND_STORAGE_GBM_BUFFER;
@@ -8719,7 +8733,7 @@ static int vrend_resource_alloc_texture(struct vrend_resource *gr,
    glGenTextures(1, &gr->gl_id);
    glBindTexture(gr->target, gr->gl_id);
 
-   debug_texture(__func__, gr);
+   debug_texture(__func__, NULL, gr);
 
    if (image_oes) {
       if (has_bit(gr->storage_bits, VREND_STORAGE_GL_IMMUTABLE) &&
@@ -12942,7 +12956,7 @@ void vrend_renderer_fill_caps(uint32_t set, uint32_t version,
    }
 
    vrend_fill_caps_glsl_version(gl_ver, gles_ver, caps);
-   VREND_DEBUG(dbg_features, NULL, "GLSL support level: %d", caps->v1.glsl_level);
+   VREND_DEBUG(dbg_features, NULL, "GLSL support level: %d\n", caps->v1.glsl_level);
 
    vrend_renderer_fill_caps_v1(gl_ver, gles_ver, caps);
 
