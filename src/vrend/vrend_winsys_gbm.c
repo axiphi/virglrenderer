@@ -117,6 +117,8 @@ static const struct format_conversion conversions[] = {
     { GBM_FORMAT_XBGR8888, VIRGL_FORMAT_R8G8B8X8_UNORM},
     { GBM_FORMAT_R8, VIRGL_FORMAT_R8_UNORM},
     { GBM_FORMAT_YVU420, VIRGL_FORMAT_YV12},
+    { GBM_FORMAT_C8, VIRGL_FORMAT_L8_UNORM },
+    { GBM_FORMAT_R16, VIRGL_FORMAT_R16_UNORM },
 };
 
 static int rendernode_open(void)
@@ -189,6 +191,7 @@ static const struct planar_layout *layout_from_format(uint32_t format)
    case GBM_FORMAT_NV12:
       return &biplanar_yuv_420_layout;
    case GBM_FORMAT_RGB565:
+   case GBM_FORMAT_R16:
       return &packed_2bpp_layout;
    case GBM_FORMAT_ARGB8888:
    case GBM_FORMAT_XRGB8888:

@@ -109,35 +109,62 @@ create_backed_scanout_resource(struct virgl_context *ctx,
 
 }
 
-#define COPY_TO_IOV(IOV_BASE, WIDTH, HEIGHT, VALUES, TYPE) \
+#define COPY_TO_IOV(IOV_BASE, WIDTH, HEIGHT, VALUES, TYPE, BPP) \
    { \
       TYPE *t = (TYPE *) IOV_BASE; \
       for (uint32_t row = 0; row < HEIGHT; ++row) { \
-         for (uint32_t col = 0; col < WIDTH; ++col, t += 4) { \
+         for (uint32_t col = 0; col < WIDTH; ++col, t += BPP) { \
+            switch(BPP) { \
+            case 1: \
+            t[0] = (TYPE) VALUES[0]; \
+            break; \
+            case 2: \
+            t[0] = (TYPE) VALUES[0]; \
+            t[1] = (TYPE) VALUES[1]; \
+            break; \
+            case 4: \
             t[0] = (TYPE) VALUES[0]; \
             t[1] = (TYPE) VALUES[1]; \
             t[2] = (TYPE) VALUES[2]; \
             t[3] = (TYPE) VALUES[3]; \
+            break; \
+            } \
          } \
       } \
    }
 
-#define CHECK_IOV(IOV_BASE, WIDTH, HEIGHT, FORMAT, VALUES, TYPE) \
+#define CHECK_IOV(IOV_BASE, WIDTH, HEIGHT, FORMAT, VALUES, TYPE, BPP) \
    { \
       TYPE *t = (TYPE *) IOV_BASE; \
       for (uint32_t row = 0; row < HEIGHT; ++row) { \
-         for (uint32_t col = 0; col < WIDTH; ++col, t += 4) { \
+         for (uint32_t col = 0; col < WIDTH; ++col, t += BPP) { \
+            switch(BPP) { \
+            case 1: \
+            ck_assert_int_eq(t[0], VALUES[0]); \
+            break; \
+            case 2: \
+            ck_assert_int_eq(t[0], VALUES[0]); \
+            ck_assert_int_eq(t[1], VALUES[1]); \
+            break; \
+            case 4: \
             ck_assert_int_eq(t[0], VALUES[0]); \
             ck_assert_int_eq(t[1], VALUES[1]); \
             ck_assert_int_eq(t[2], VALUES[2]); \
             if (util_format_has_alpha(FORMAT)) \
                ck_assert_int_eq(t[3], VALUES[3]); \
+            break; \
+            } \
          } \
       } \
    }
 
 static void iov_up_and_download(enum pipe_format format, uint32_t bind, const uint32_t values[4])
 {
+   const unsigned bpp = util_format_get_blocksize(format);
+
+   /* Precondition, we only test 8 bit 1/2/4 chan formats */
+   ck_assert_int_eq(bpp == 1 || bpp == 2 || bpp == 4 || bpp == 8, 1);
+
    struct virgl_context ctx;
    common_ctx_init(&ctx);
 
@@ -159,10 +186,10 @@ static void iov_up_and_download(enum pipe_format format, uint32_t bind, const ui
    int red_channel_bits = util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_RGB, 0);
    switch (red_channel_bits) {
    case 8:
-       COPY_TO_IOV(res.iovs[0].iov_base, width, height, values, uint8_t);
+       COPY_TO_IOV(res.iovs[0].iov_base, width, height, values, uint8_t, bpp);
        break;
    case 16:
-       COPY_TO_IOV(res.iovs[0].iov_base, width, height, values, uint16_t);
+       COPY_TO_IOV(res.iovs[0].iov_base, width, height, values, uint16_t, bpp / 2);
        break;
    default:
        assert(0);
@@ -185,10 +212,10 @@ static void iov_up_and_download(enum pipe_format format, uint32_t bind, const ui
 
    switch (red_channel_bits) {
    case 8:
-       CHECK_IOV(res.iovs[0].iov_base, width, height, format, values, uint8_t);
+       CHECK_IOV(res.iovs[0].iov_base, width, height, format, values, uint8_t, bpp);
        break;
    case 16:
-       CHECK_IOV(res.iovs[0].iov_base, width, height, format, values, uint16_t);
+       CHECK_IOV(res.iovs[0].iov_base, width, height, format, values, uint16_t, bpp / 2);
        break;
    }
 
@@ -278,6 +305,38 @@ START_TEST(iov_up_and_download_r16g16b16a16_float)
 }
 END_TEST
 
+START_TEST(iov_up_and_download_r8_unorm)
+{
+   const uint32_t values[4] = {128};
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   iov_up_and_download(PIPE_FORMAT_R8_UNORM, bind, values);
+}
+END_TEST
+
+START_TEST(iov_up_and_download_l8_unorm)
+{
+   const uint32_t values[4] = {128};
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   iov_up_and_download(PIPE_FORMAT_L8_UNORM, bind, values);
+}
+END_TEST
+
+START_TEST(iov_up_and_download_b5g6r5_unorm)
+{
+   const uint32_t values[4] = {128, 10};
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   iov_up_and_download(PIPE_FORMAT_B5G6R5_UNORM, bind, values);
+}
+END_TEST
+
+START_TEST(iov_up_and_download_r16_unorm)
+{
+   const uint32_t values[4] = {128, 10};
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   iov_up_and_download(PIPE_FORMAT_R16_UNORM, bind, values);
+}
+END_TEST
+
 enum test_gbm_method {
    ALWAYS_TRY_GBM,
    UPLOAD_USE_GL,
@@ -303,6 +362,11 @@ static void staging_transfer_up_and_download(enum pipe_format format,
                                               uint32_t bind,
                                               enum test_gbm_method method)
 {
+   const unsigned bpp = util_format_get_blocksize(format);
+
+   /* Precondition, we only test 8 bit 1/2/4 chan formats */
+   ck_assert_int_eq(bpp == 1 || bpp == 2 || bpp == 4 || bpp == 8, 1);
+
    struct virgl_context ctx;
    common_ctx_init(&ctx);
 
@@ -441,6 +505,34 @@ START_TEST(transfer_up_and_download_b10g10r10x2_unorm)
 }
 END_TEST
 
+START_TEST(transfer_up_and_download_r8_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R8_UNORM, bind, ALWAYS_TRY_GBM);
+}
+END_TEST
+
+START_TEST(transfer_up_and_download_l8_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_L8_UNORM, bind, ALWAYS_TRY_GBM);
+}
+END_TEST
+
+START_TEST(transfer_up_and_download_b5g6r5_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R8_UNORM, bind, ALWAYS_TRY_GBM);
+}
+END_TEST
+
+START_TEST(transfer_up_and_download_r16_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_L8_UNORM, bind, ALWAYS_TRY_GBM);
+}
+END_TEST
+
 START_TEST(transfer_gl_up_gbm_download_b8g8r8a8_unorm)
 {
    uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
@@ -496,6 +588,34 @@ START_TEST(transfer_gl_up_gbm_download_b10g10r10x2_unorm)
 {
    uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
    staging_transfer_up_and_download(PIPE_FORMAT_B10G10R10X2_UNORM, bind, UPLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gl_up_gbm_download_r8_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R8_UNORM, bind, UPLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gl_up_gbm_download_l8_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_L8_UNORM, bind, UPLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gl_up_gbm_download_b5g6r5_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_B5G6R5_UNORM, bind, UPLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gl_up_gbm_download_r16_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R16_UNORM, bind, UPLOAD_USE_GL);
 }
 END_TEST
 
@@ -558,6 +678,33 @@ START_TEST(transfer_gbm_up_gl_download_b10g10r10x2_unorm)
 }
 END_TEST
 
+START_TEST(transfer_gbm_up_gl_download_r8_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R8_UNORM, bind, DOWNLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gbm_up_gl_download_l8_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_L8_UNORM, bind, DOWNLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gbm_up_gl_download_b5g6r5_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_B5G6R5_UNORM, bind, DOWNLOAD_USE_GL);
+}
+END_TEST
+
+START_TEST(transfer_gbm_up_gl_download_r16_unorm)
+{
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   staging_transfer_up_and_download(PIPE_FORMAT_R16_UNORM, bind, DOWNLOAD_USE_GL);
+}
+END_TEST
 
 START_TEST(transfer_up_and_download_r16g16b16x16_float)
 {
@@ -605,8 +752,10 @@ static void gbm_clear_and_download(enum pipe_format format,
                                    uint32_t bind,
                                    const uint8_t clear_color[4])
 {
-   /* Precondition, we only test 8 bit 4 chan formats */
-   ck_assert_int_eq(util_format_get_blocksize(format), 4);
+   const unsigned bpp = util_format_get_blocksize(format);
+
+   /* Precondition, we only test 8 bit 1/2/4 chan formats */
+   ck_assert_int_eq(bpp == 1 || bpp == 2 || bpp == 4, 1);
 
    struct virgl_context ctx;
    common_ctx_init(&ctx);
@@ -630,10 +779,21 @@ static void gbm_clear_and_download(enum pipe_format format,
    struct virgl_box box;
 
    // need 8 bit per component
-   color.ui[0] = clear_color[0] |
-                 clear_color[1] << 8 |
-                 clear_color[2] << 16 |
-                 clear_color[3] << 24;
+   switch(bpp) {
+   case 1:
+      color.ui[0] = clear_color[0];
+      break;
+   case 2:
+      color.ui[0] = clear_color[0] |
+                    clear_color[1] << 8;
+      break;
+   case 4:
+      color.ui[0] = clear_color[0] |
+                    clear_color[1] << 8 |
+                    clear_color[2] << 16 |
+                    clear_color[3] << 24;
+      break;
+   }
    box.x = 0;
    box.y = 0;
    box.z = 0;
@@ -673,12 +833,23 @@ static void gbm_clear_and_download(enum pipe_format format,
    uint8_t *t = (uint8_t *)readback_buffer.iovs[0].iov_base;
 
    for (uint32_t row = 0; row < height; ++row) {
-      for (uint32_t col = 0; col < width; ++col, t += 4) {
-         ck_assert_int_eq(t[0], clear_color[0]);
-         ck_assert_int_eq(t[1], clear_color[1]);
-         ck_assert_int_eq(t[2], clear_color[2]);
-         if (util_format_has_alpha(format))
-            ck_assert_int_eq(t[3], clear_color[3]);
+      for (uint32_t col = 0; col < width; ++col, t += bpp) {
+         switch(bpp) {
+         case 1:
+            ck_assert_int_eq(t[0], clear_color[0]);
+            break;
+         case 2:
+            ck_assert_int_eq(t[0], clear_color[0]);
+            ck_assert_int_eq(t[1], clear_color[1]);
+            break;
+         case 4:
+            ck_assert_int_eq(t[0], clear_color[0]);
+            ck_assert_int_eq(t[1], clear_color[1]);
+            ck_assert_int_eq(t[2], clear_color[2]);
+            if (util_format_has_alpha(format))
+               ck_assert_int_eq(t[3], clear_color[3]);
+            break;
+         }
       }
    }
 
@@ -773,6 +944,48 @@ START_TEST(gbm_clear_and_download_b10g10r10x2)
 }
 END_TEST
 
+START_TEST(gbm_clear_and_download_r8_unorm)
+{
+   const uint8_t clear_color[4] = {
+       128,
+   };
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   gbm_clear_and_download(PIPE_FORMAT_R8_UNORM, bind, clear_color);
+}
+END_TEST
+
+START_TEST(gbm_clear_and_download_l8_unorm)
+{
+   const uint8_t clear_color[4] = {
+       128,
+   };
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   gbm_clear_and_download(PIPE_FORMAT_L8_UNORM, bind, clear_color);
+}
+END_TEST
+
+
+START_TEST(gbm_clear_and_download_b5g6r5_unorm)
+{
+   const uint8_t clear_color[4] = {
+       128, 64
+   };
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   gbm_clear_and_download(PIPE_FORMAT_B5G6R5_UNORM, bind, clear_color);
+}
+END_TEST
+
+START_TEST(gbm_clear_and_download_r16_unorm)
+{
+   const uint8_t clear_color[4] = {
+       128, 64
+   };
+   uint32_t bind = VIRGL_BIND_SCANOUT | VIRGL_BIND_RENDER_TARGET;
+   gbm_clear_and_download(PIPE_FORMAT_R16_UNORM, bind, clear_color);
+}
+END_TEST
+
+
 static Suite *virgl_init_suite(void)
 {
    Suite *s = suite_create("virgl_gbm");
@@ -833,6 +1046,36 @@ static Suite *virgl_init_suite(void)
    tcase_add_test(tc_gbm_rw, transfer_gbm_up_gl_download_r16g16b16a16_float);
 
    suite_add_tcase(s, tc_gbm_rw);
+
+   TCase *tc_gbm_rw1bpp = tcase_create("gbm_rw1bpp");
+   tcase_add_test(tc_gbm_rw1bpp, iov_up_and_download_r8_unorm);
+   tcase_add_test(tc_gbm_rw1bpp, iov_up_and_download_l8_unorm);
+
+   tcase_add_test(tc_gbm_rw1bpp, transfer_up_and_download_r8_unorm);
+   tcase_add_test(tc_gbm_rw1bpp, transfer_up_and_download_l8_unorm);
+   tcase_add_test(tc_gbm_rw1bpp, transfer_gl_up_gbm_download_r8_unorm);
+   tcase_add_test(tc_gbm_rw1bpp, transfer_gl_up_gbm_download_l8_unorm);
+   tcase_add_test(tc_gbm_rw1bpp, transfer_gbm_up_gl_download_r8_unorm);
+   tcase_add_test(tc_gbm_rw1bpp, transfer_gbm_up_gl_download_l8_unorm);
+
+   tcase_add_test(tc_gbm_rw1bpp, gbm_clear_and_download_r8_unorm);
+   tcase_add_test(tc_gbm_rw1bpp, gbm_clear_and_download_l8_unorm);
+   suite_add_tcase(s, tc_gbm_rw1bpp);
+
+   TCase *tc_gbm_rw2bpp = tcase_create("gbm_rw2bpp");
+   tcase_add_test(tc_gbm_rw2bpp, iov_up_and_download_b5g6r5_unorm);
+   tcase_add_test(tc_gbm_rw2bpp, iov_up_and_download_r16_unorm);
+
+   tcase_add_test(tc_gbm_rw2bpp, transfer_up_and_download_b5g6r5_unorm);
+   tcase_add_test(tc_gbm_rw2bpp, transfer_up_and_download_r16_unorm);
+   tcase_add_test(tc_gbm_rw2bpp, transfer_gl_up_gbm_download_b5g6r5_unorm);
+   tcase_add_test(tc_gbm_rw2bpp, transfer_gl_up_gbm_download_r16_unorm);
+   tcase_add_test(tc_gbm_rw2bpp, transfer_gbm_up_gl_download_b5g6r5_unorm);
+   tcase_add_test(tc_gbm_rw2bpp, transfer_gbm_up_gl_download_r16_unorm);
+
+   tcase_add_test(tc_gbm_rw2bpp, gbm_clear_and_download_b5g6r5_unorm);
+   tcase_add_test(tc_gbm_rw2bpp, gbm_clear_and_download_r16_unorm);
+   suite_add_tcase(s, tc_gbm_rw2bpp);
    return s;
 
 }
