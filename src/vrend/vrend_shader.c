@@ -4706,6 +4706,23 @@ static void get_source_swizzle(const struct tgsi_full_src_register *src, char sw
    *swizzle++ = 0;
 }
 
+static bool apply_integer_src_negate(struct vrend_strbuf *src_buf,
+                                     enum tgsi_opcode_type stype)
+{
+   char *src_without_negate = strdup(src_buf->buf);
+
+   if (!src_without_negate)
+      return false;
+
+   if (stype == TGSI_TYPE_UNSIGNED)
+      strbuf_fmt(src_buf, "uvec4(-ivec4(%s))", src_without_negate);
+   else
+      strbuf_fmt(src_buf, "-ivec4(%s)", src_without_negate);
+
+   free(src_without_negate);
+   return true;
+}
+
 // TODO Consider exposing non-const ctx-> members as args to make *ctx const
 static bool
 get_source_info(struct dump_ctx *ctx,
@@ -4756,11 +4773,13 @@ get_source_info(struct dump_ctx *ctx,
       char fp64_src[255];
       int swz_idx = 0, pre_idx = 0;
       bool isfloatabsolute = src->Register.Absolute && stype != TGSI_TYPE_DOUBLE;
+      bool isintegernegate = src->Register.Negate &&
+         (stype == TGSI_TYPE_SIGNED || stype == TGSI_TYPE_UNSIGNED);
 
       sinfo->override_no_wm[i] = false;
       sinfo->override_no_cast[i] = false;
 
-      if (src->Register.Negate)
+      if (src->Register.Negate && !isintegernegate)
          prefix[pre_idx++] = '-';
       if (isfloatabsolute)
          strcpy(&prefix[pre_idx++], "abs(");
@@ -5235,6 +5254,11 @@ get_source_info(struct dump_ctx *ctx,
       } break;
       default:
          return false;
+      }
+
+      if (isintegernegate) {
+         if (!apply_integer_src_negate(src_buf, stype))
+            return false;
       }
 
       if (stype == TGSI_TYPE_DOUBLE) {

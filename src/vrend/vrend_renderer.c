@@ -1278,7 +1278,7 @@ vrend_surface_reference(struct vrend_surface **ptr, struct vrend_surface *surf)
 
 static void vrend_destroy_sampler_view(struct vrend_sampler_view *samp)
 {
-   if (samp->texture->gl_id != samp->gl_id)
+   if (samp->gl_id && samp->texture->gl_id != samp->gl_id)
       glDeleteTextures(1, &samp->gl_id);
    vrend_resource_reference(&samp->texture, NULL);
    free(samp);
@@ -2711,6 +2711,7 @@ int vrend_create_sampler_view(struct vrend_context *ctx,
 
    if (view->target == PIPE_BUFFER) {
       view->target = view->texture->target;
+      view->gl_id = 0;
 
       view->u.buf.first_element = val0;
       view->u.buf.last_element = val1;
@@ -3744,10 +3745,10 @@ void vrend_set_single_sampler_view(struct vrend_context *ctx,
       } else {
          GLenum internalformat;
 
-         if (!view->texture->tbo_tex_id)
-            glGenTextures(1, &view->texture->tbo_tex_id);
+         if (!view->gl_id)
+            glGenTextures(1, &view->gl_id);
 
-         glBindTexture(GL_TEXTURE_BUFFER, view->texture->tbo_tex_id);
+         glBindTexture(GL_TEXTURE_BUFFER, view->gl_id);
          internalformat = tex_conv_table[view->format].internalformat;
          ctx->sub->shader_dirty = true;
 
@@ -5289,7 +5290,7 @@ static GLuint vrend_draw_bind_samplers_shader(struct vrend_sub_context *sub_ctx,
             debug_texture(__func__, tview->texture);
 
             if (has_bit(tview->texture->storage_bits, VREND_STORAGE_GL_BUFFER)) {
-               id = tview->texture->tbo_tex_id;
+               id = tview->gl_id;
                target = GL_TEXTURE_BUFFER;
             }
 
