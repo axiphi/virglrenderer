@@ -6,10 +6,13 @@
 #include "config.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <xf86drm.h>
@@ -39,6 +42,10 @@
 #endif
 
 static struct virgl_renderer_capset_drm capset;
+
+#define DRM_RENDER_NODE_RESCAN_TIMEOUT_NS UINT64_C(50000000)
+#define DRM_RENDER_NODE_RESCAN_INTERVAL_NS UINT64_C(1000000)
+#define DRM_RENDER_MINOR_BASE (DRM_NODE_RENDER * DRM_MAX_MINOR)
 
 static const struct backend {
    uint32_t context_type;
@@ -88,9 +95,59 @@ static const struct backend {
 #endif
 };
 
+static int
+open_render_node_for_driver(const char *driver_name)
+{
+   for (int minor = DRM_RENDER_MINOR_BASE;
+        minor < DRM_RENDER_MINOR_BASE + DRM_MAX_MINOR; minor++) {
+      char path[DRM_NODE_NAME_MAX];
+      int path_len = snprintf(path, sizeof(path), DRM_RENDER_DEV_NAME,
+                              DRM_DIR_NAME, minor);
+      if (path_len < 0 || (size_t)path_len >= sizeof(path))
+         return -ENAMETOOLONG;
+
+      int candidate = open(path, O_RDWR | O_CLOEXEC);
+      if (candidate < 0)
+         continue;
+
+      drmVersionPtr ver = drmGetVersion(candidate);
+      bool matches = ver && !strcmp(ver->name, driver_name);
+      if (ver)
+         drmFreeVersion(ver);
+      if (matches)
+         return candidate;
+
+      close(candidate);
+   }
+
+   return -ENODEV;
+}
+
+static int
+monotonic_time_ns(uint64_t *time_ns)
+{
+   struct timespec ts;
+
+   if (clock_gettime(CLOCK_MONOTONIC, &ts))
+      return -errno;
+
+   *time_ns = (uint64_t)ts.tv_sec * NSEC_PER_SEC + ts.tv_nsec;
+   return 0;
+}
+
 int
 drm_renderer_init(int drm_fd)
 {
+   uint64_t deadline_ns = 0;
+
+   if (drm_fd == -1) {
+      int ret = monotonic_time_ns(&deadline_ns);
+      if (ret)
+         return ret;
+      deadline_ns += DRM_RENDER_NODE_RESCAN_TIMEOUT_NS;
+   }
+
+retry:
    for (unsigned i = 0; i < ARRAY_SIZE(backends); i++) {
       const struct backend *b = &backends[i];
       int fd;
@@ -98,9 +155,11 @@ drm_renderer_init(int drm_fd)
       if (drm_fd != -1) {
          fd = drm_fd;
       } else {
-         fd = drmOpenWithType(b->name, NULL, DRM_NODE_RENDER);
-         if (fd < 0)
+         fd = open_render_node_for_driver(b->name);
+         if (fd == -ENODEV)
             continue;
+         if (fd < 0)
+            return fd;
       }
 
       drmVersionPtr ver = drmGetVersion(fd);
@@ -110,10 +169,9 @@ drm_renderer_init(int drm_fd)
       }
 
       if (strcmp(ver->name, b->name)) {
-         /* In the drmOpenWithType() path, we will only get back an fd
-          * for the device with matching name.  But when we are using
-          * an externally provided fd, we need to go thru the backends
-          * table to see which one has the matching name.
+         /* Direct render-node discovery only returns an fd for the requested
+          * driver.  An externally provided fd still needs to be matched
+          * against the backends table.
           */
          assert(drm_fd != -1);
          drmFreeVersion(ver);
@@ -134,8 +192,25 @@ drm_renderer_init(int drm_fd)
       return ret;
    }
 
-   if (drm_fd != -1)
+   if (drm_fd != -1) {
       close(drm_fd);
+   } else {
+      uint64_t now_ns = 0;
+      int ret = monotonic_time_ns(&now_ns);
+      if (ret)
+         return ret;
+
+      if (now_ns < deadline_ns) {
+         uint64_t delay_ns = MIN2(DRM_RENDER_NODE_RESCAN_INTERVAL_NS,
+                                  deadline_ns - now_ns);
+         struct timespec delay = {
+            .tv_sec = delay_ns / NSEC_PER_SEC,
+            .tv_nsec = delay_ns % NSEC_PER_SEC,
+         };
+         nanosleep(&delay, NULL);
+         goto retry;
+      }
+   }
 
    return -ENODEV;
 }
