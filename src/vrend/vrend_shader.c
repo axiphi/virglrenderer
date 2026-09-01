@@ -616,6 +616,9 @@ static inline int gs_input_prim_to_size(int prim)
 
 static inline bool fs_emit_layout(const struct dump_ctx *ctx)
 {
+   if (!ctx->cfg->has_fragment_coord_conventions)
+      return false;
+
    if (ctx->fs_integer_pixel_center)
       return true;
 

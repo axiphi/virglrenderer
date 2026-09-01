@@ -251,6 +251,7 @@ struct vrend_shader_cfg {
    uint32_t has_gpu_shader5 : 1;
    uint32_t has_es31_compat : 1;
    uint32_t has_conservative_depth : 1;
+   uint32_t has_fragment_coord_conventions : 1;
    uint32_t use_integer : 1;
    uint32_t has_dual_src_blend : 1;
    uint32_t has_fbfetch_coherent : 1;
