@@ -8640,6 +8640,13 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
       bo = gbm_bo_create(gbm->device, gr->base.width0, gr->base.height0,
                          gbm_format, gbm_flags);
 
+      if(!bo) {
+         virgl_info("%s: %ux%u format=%u bind=0x%x gbm_flags ignored\n",
+            __func__,  gr->base.width0, gr->base.height0, format, gr->base.bind);
+         bo = gbm_bo_create(gbm->device, gr->base.width0, gr->base.height0,
+                            gbm_format, GBM_BO_USE_LINEAR);
+      }
+
       gr->gbm_direct_transfer = true;
    }
    if (!bo)
@@ -8686,7 +8693,10 @@ static int vrend_resource_alloc_texture(struct vrend_resource *gr,
 
    if (!image_oes) {
       vrend_resource_d3d_init(gr, format);
-      vrend_resource_gbm_init(gr, format);
+
+      if (gr->base.bind != VIRGL_BIND_DEPTH_STENCIL)
+         vrend_resource_gbm_init(gr, format);
+
       if (gr->gbm_bo && !has_bit(gr->storage_bits, VREND_STORAGE_EGL_IMAGE))
          return 0;
 
