@@ -404,6 +404,8 @@ struct global_renderer_state {
 #endif
    bool d3d_share_texture : 1;
    bool gbm_layout_feat : 1;
+   bool sampler_float_lod : 1;
+   bool sampler_wrap_border : 1;
 };
 
 struct sysval_uniform_block {
@@ -1256,6 +1258,139 @@ static void init_features(int gl_ver, int gles_ver)
          }
       }
    }
+}
+
+
+static bool vrend_probe_gl_sampler_param(GLuint sampler, GLenum pname, GLint param)
+{
+   GLenum err;
+
+   while ((err = glGetError()) != GL_NO_ERROR)
+      ;
+
+   glSamplerParameteri(sampler, pname, param);
+   err = glGetError();
+   if (err != GL_NO_ERROR) {
+      while (glGetError() != GL_NO_ERROR)
+         ;
+      return false;
+   }
+   return true;
+}
+
+static bool vrend_probe_gl_sampler_param_f(GLuint sampler, GLenum pname, GLfloat param)
+{
+   GLenum err;
+
+   while ((err = glGetError()) != GL_NO_ERROR)
+      ;
+
+   glSamplerParameterf(sampler, pname, param);
+   err = glGetError();
+   if (err != GL_NO_ERROR) {
+      while (glGetError() != GL_NO_ERROR)
+         ;
+      return false;
+   }
+   return true;
+}
+
+static void vrend_gl_clear_errors(void)
+{
+   while (glGetError() != GL_NO_ERROR)
+      ;
+}
+
+static bool vrend_samplerParameteri_safe(GLuint sampler, GLenum pname, GLint param)
+{
+   glSamplerParameteri(sampler, pname, param);
+   if (glGetError() == GL_NO_ERROR)
+      return true;
+   vrend_gl_clear_errors();
+   return false;
+}
+
+static bool vrend_samplerParameterf_safe(GLuint sampler, GLenum pname, GLfloat param)
+{
+   glSamplerParameterf(sampler, pname, param);
+   if (glGetError() == GL_NO_ERROR)
+      return true;
+   vrend_gl_clear_errors();
+   return false;
+}
+
+static void vrend_probe_sampler_features(void)
+{
+   GLuint sampler = 0;
+
+   vrend_state.sampler_float_lod = true;
+   vrend_state.sampler_wrap_border = true;
+
+   if (!has_feature(feat_samplers))
+      return;
+
+   glGenSamplers(1, &sampler);
+   if (!sampler)
+      return;
+
+   vrend_gl_clear_errors();
+
+   if (!vrend_probe_gl_sampler_param(sampler, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER)) {
+      vrend_state.sampler_wrap_border = false;
+      virgl_warn("Disabling GL_CLAMP_TO_BORDER on samplers: not supported by host GL\n");
+   }
+
+   if (!vrend_probe_gl_sampler_param_f(sampler, GL_TEXTURE_MIN_LOD, 0.f) ||
+       !vrend_probe_gl_sampler_param_f(sampler, GL_TEXTURE_MAX_LOD, 1000.f) ||
+       !vrend_probe_gl_sampler_param_f(sampler, GL_TEXTURE_LOD_BIAS, 0.f)) {
+      vrend_state.sampler_float_lod = false;
+      virgl_warn("Disabling float LOD sampler params: not supported by host GL\n");
+   }
+
+   if (has_feature(feat_texture_srgb_decode) &&
+       !vrend_probe_gl_sampler_param(sampler, GL_TEXTURE_SRGB_DECODE_EXT, GL_DECODE_EXT)) {
+      clear_feature(feat_texture_srgb_decode);
+      virgl_warn("Disabling GL_EXT_texture_sRGB_decode: sampler param rejected by host GL\n");
+   }
+
+   if (has_feature(feat_seamless_cubemap_per_texture) &&
+       !vrend_probe_gl_sampler_param(sampler, GL_TEXTURE_CUBE_MAP_SEAMLESS, GL_TRUE)) {
+      clear_feature(feat_seamless_cubemap_per_texture);
+      virgl_warn("Disabling seamless cube map per sampler: not supported by host GL\n");
+   }
+
+   if (has_feature(feat_texture_mirror_clamp) &&
+       !vrend_probe_gl_sampler_param(sampler, GL_TEXTURE_WRAP_S, GL_MIRROR_CLAMP_EXT)) {
+      clear_feature(feat_texture_mirror_clamp);
+      virgl_warn("Disabling GL_EXT_texture_mirror_clamp: not supported by host GL\n");
+   }
+
+   if (has_feature(feat_texture_mirror_clamp_to_edge) &&
+       !vrend_probe_gl_sampler_param(sampler, GL_TEXTURE_WRAP_S, GL_MIRROR_CLAMP_TO_EDGE_EXT)) {
+      clear_feature(feat_texture_mirror_clamp_to_edge);
+      virgl_warn("Disabling mirror clamp to edge: not supported by host GL\n");
+   }
+
+   if (has_feature(feat_texture_mirror_clamp_to_border) &&
+       !vrend_probe_gl_sampler_param(sampler, GL_TEXTURE_WRAP_S, GL_MIRROR_CLAMP_TO_BORDER_EXT)) {
+      clear_feature(feat_texture_mirror_clamp_to_border);
+      virgl_warn("Disabling mirror clamp to border: not supported by host GL\n");
+   }
+
+   if (has_feature(feat_sampler_border_colors)) {
+      const GLuint border[4] = { 0, 0, 0, 0 };
+
+      vrend_gl_clear_errors();
+      glSamplerParameterIuiv(sampler, GL_TEXTURE_BORDER_COLOR, border);
+      if (glGetError() != GL_NO_ERROR) {
+         clear_feature(feat_sampler_border_colors);
+         virgl_warn("Disabling sampler border colors: not supported by host GL\n");
+         vrend_gl_clear_errors();
+      }
+   }
+
+   glDeleteSamplers(1, &sampler);
+   vrend_gl_clear_errors();
 }
 
 static void vrend_destroy_surface(struct vrend_surface *surf)
@@ -2520,7 +2655,10 @@ static GLuint convert_wrap(struct vrend_context *ctx, int wrap)
    case PIPE_TEX_WRAP_CLAMP: if (vrend_state.use_core_profile == false) return GL_CLAMP; else return GL_CLAMP_TO_EDGE;
 
    case PIPE_TEX_WRAP_CLAMP_TO_EDGE: return GL_CLAMP_TO_EDGE;
-   case PIPE_TEX_WRAP_CLAMP_TO_BORDER: return GL_CLAMP_TO_BORDER;
+   case PIPE_TEX_WRAP_CLAMP_TO_BORDER:
+      if (vrend_state.sampler_wrap_border)
+         return GL_CLAMP_TO_BORDER;
+      return GL_CLAMP_TO_EDGE;
 
    case PIPE_TEX_WRAP_MIRROR_REPEAT: return GL_MIRRORED_REPEAT;
    case PIPE_TEX_WRAP_MIRROR_CLAMP:
@@ -2580,7 +2718,10 @@ static void apply_sampler_border_color(GLuint sampler,
                                        const GLuint colors[static 4])
 {
    if (has_feature(feat_sampler_border_colors)) {
+      vrend_gl_clear_errors();
       glSamplerParameterIuiv(sampler, GL_TEXTURE_BORDER_COLOR, colors);
+      if (glGetError() != GL_NO_ERROR)
+         vrend_gl_clear_errors();
    } else if (colors[0] || colors[1] || colors[2] || colors[3]) {
       virgl_warn("Sampler border color setting requested but not supported\n");
    }
@@ -2599,38 +2740,52 @@ int vrend_create_sampler_state(struct vrend_context *ctx,
    state->base = *templ;
 
    if (has_feature(feat_samplers)) {
+      vrend_gl_clear_errors();
       glGenSamplers(2, state->ids);
+      vrend_gl_clear_errors();
 
       for (int i = 0; i < 2; ++i) {
-         glSamplerParameteri(state->ids[i], GL_TEXTURE_WRAP_S, convert_wrap(ctx, templ->wrap_s));
-         glSamplerParameteri(state->ids[i], GL_TEXTURE_WRAP_T, convert_wrap(ctx, templ->wrap_t));
-         glSamplerParameteri(state->ids[i], GL_TEXTURE_WRAP_R, convert_wrap(ctx, templ->wrap_r));
-         glSamplerParameterf(state->ids[i], GL_TEXTURE_MIN_FILTER, convert_min_filter(templ->min_img_filter, templ->min_mip_filter));
-         glSamplerParameterf(state->ids[i], GL_TEXTURE_MAG_FILTER, convert_mag_filter(templ->mag_img_filter));
-         glSamplerParameterf(state->ids[i], GL_TEXTURE_MIN_LOD, templ->min_lod);
-         glSamplerParameterf(state->ids[i], GL_TEXTURE_MAX_LOD, templ->max_lod);
-         glSamplerParameteri(state->ids[i], GL_TEXTURE_COMPARE_MODE, templ->compare_mode ? GL_COMPARE_R_TO_TEXTURE : GL_NONE);
-         glSamplerParameteri(state->ids[i], GL_TEXTURE_COMPARE_FUNC, GL_NEVER + templ->compare_func);
+         vrend_gl_clear_errors();
+         vrend_samplerParameteri_safe(state->ids[i], GL_TEXTURE_WRAP_S,
+                                      convert_wrap(ctx, templ->wrap_s));
+         vrend_samplerParameteri_safe(state->ids[i], GL_TEXTURE_WRAP_T,
+                                      convert_wrap(ctx, templ->wrap_t));
+         vrend_samplerParameteri_safe(state->ids[i], GL_TEXTURE_WRAP_R,
+                                      convert_wrap(ctx, templ->wrap_r));
+         vrend_samplerParameteri_safe(state->ids[i], GL_TEXTURE_MIN_FILTER,
+                                      convert_min_filter(templ->min_img_filter, templ->min_mip_filter));
+         vrend_samplerParameteri_safe(state->ids[i], GL_TEXTURE_MAG_FILTER,
+                                      convert_mag_filter(templ->mag_img_filter));
+         if (vrend_state.sampler_float_lod) {
+            vrend_samplerParameterf_safe(state->ids[i], GL_TEXTURE_MIN_LOD, templ->min_lod);
+            vrend_samplerParameterf_safe(state->ids[i], GL_TEXTURE_MAX_LOD, templ->max_lod);
+         }
+         vrend_samplerParameteri_safe(state->ids[i], GL_TEXTURE_COMPARE_MODE,
+                                      templ->compare_mode ? GL_COMPARE_R_TO_TEXTURE : GL_NONE);
+         if (templ->compare_mode)
+            vrend_samplerParameteri_safe(state->ids[i], GL_TEXTURE_COMPARE_FUNC,
+                                         GL_NEVER + templ->compare_func);
          if (vrend_state.use_gles) {
             if (templ->lod_bias)
                report_gles_warn(ctx, GLES_WARN_LOD_BIAS);
-         } else
-            glSamplerParameterf(state->ids[i], GL_TEXTURE_LOD_BIAS, templ->lod_bias);
+         } else if (vrend_state.sampler_float_lod) {
+            vrend_samplerParameterf_safe(state->ids[i], GL_TEXTURE_LOD_BIAS, templ->lod_bias);
+         }
 
          if (vrend_state.use_gles) {
-            if (templ->seamless_cube_map != 0) {
+            if (templ->seamless_cube_map != 0)
                report_gles_warn(ctx, GLES_WARN_SEAMLESS_CUBE_MAP);
-            }
-         } else {
-            if (has_feature(feat_seamless_cubemap_per_texture)) {
-               glSamplerParameteri(state->ids[i], GL_TEXTURE_CUBE_MAP_SEAMLESS, templ->seamless_cube_map);
-            }
+         } else if (has_feature(feat_seamless_cubemap_per_texture) &&
+                    templ->seamless_cube_map) {
+            vrend_samplerParameteri_safe(state->ids[i], GL_TEXTURE_CUBE_MAP_SEAMLESS, GL_TRUE);
          }
 
          apply_sampler_border_color(state->ids[i], templ->border_color.ui);
-         if (has_feature(feat_texture_srgb_decode))
-            glSamplerParameteri(state->ids[i], GL_TEXTURE_SRGB_DECODE_EXT,
-                                i == 0 ? GL_SKIP_DECODE_EXT : GL_DECODE_EXT);
+         if (has_feature(feat_texture_srgb_decode)) {
+            vrend_samplerParameteri_safe(state->ids[i], GL_TEXTURE_SRGB_DECODE_EXT,
+                                         i == 0 ? GL_SKIP_DECODE_EXT : GL_DECODE_EXT);
+         }
+         vrend_gl_clear_errors();
       }
    }
    ret_handle = vrend_renderer_object_insert(ctx, state, handle,
@@ -7662,6 +7817,8 @@ int vrend_renderer_init(const struct vrend_if_cbs *cbs, uint32_t flags)
 
    init_features(gles ? 0 : gl_ver,
                  gles ? gl_ver : 0);
+
+   vrend_probe_sampler_features();
 
    if (!vrend_winsys_has_gl_colorspace())
       clear_feature(feat_srgb_write_control) ;
