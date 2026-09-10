@@ -11398,6 +11398,17 @@ int vrend_renderer_create_fence(struct vrend_context *ctx,
    if (fence->glsyncobj == NULL)
       goto fail;
 
+#ifdef HAVE_EPOXY_EGL_H
+   if (vrend_state.use_egl_fence) {
+      int fence_fd = -1;
+      if (virgl_egl_export_fence(egl, fence->eglsyncobj, &fence_fd) &&
+          virgl_fence_set_fd(fence_id, fence_fd))
+         virgl_error("failed to export fence sync object\n");
+      if (fence_fd != -1)
+         close(fence_fd);
+   }
+#endif
+
    if (vrend_state.sync_thread) {
       mtx_lock(&vrend_state.fence_mutex);
       list_addtail(&fence->fences, &vrend_state.fence_wait_list);
@@ -11407,14 +11418,6 @@ int vrend_renderer_create_fence(struct vrend_context *ctx,
       list_addtail(&fence->fences, &vrend_state.fence_list);
    }
 
-#ifdef HAVE_EPOXY_EGL_H
-   int fence_fd = -1;
-   if (vrend_renderer_export_ctx0_fence(fence_id, &fence_fd) == 0 &&
-       virgl_fence_set_fd(fence_id, fence_fd))
-      virgl_error("failed to export fence sync object\n");
-   if (fence_fd != -1)
-      close(fence_fd);
-#endif
    return 0;
 
  fail:
@@ -13579,78 +13582,6 @@ int vrend_renderer_create_ctx0_fence(uint32_t fence_id)
          return EINVAL;
    return vrend_renderer_create_fence(vrend_state.ctx0,
          VIRGL_RENDERER_FENCE_FLAG_MERGEABLE, fence_id);
-}
-
-#ifdef HAVE_EPOXY_EGL_H
-static bool find_ctx0_fence_locked(struct list_head *fence_list,
-                                   uint64_t fence_id,
-                                   bool *seen_first,
-                                   struct vrend_fence **fence)
-{
-   list_for_each_entry(struct vrend_fence, iter, fence_list, fences) {
-      /* only consider ctx0 fences */
-      if (iter->ctx != vrend_state.ctx0)
-         continue;
-
-      if (iter->fence_id == fence_id) {
-         *fence = iter;
-         return true;
-      }
-
-      if (!*seen_first) {
-         if (fence_id < iter->fence_id)
-            return true;
-         *seen_first = true;
-      }
-   }
-
-   return false;
-}
-#endif
-
-int vrend_renderer_export_ctx0_fence(uint32_t fence_id, int* out_fd) {
-#ifdef HAVE_EPOXY_EGL_H
-   int ret = 0;
-
-   if (!vrend_state.use_egl_fence) {
-      return -EINVAL;
-   }
-
-   if (vrend_state.sync_thread)
-      mtx_lock(&vrend_state.fence_mutex);
-
-   bool seen_first = false;
-   struct vrend_fence *fence = NULL;
-   bool found = find_ctx0_fence_locked(&vrend_state.fence_list,
-                                       fence_id,
-                                       &seen_first,
-                                       &fence);
-   if (!found) {
-      found = find_ctx0_fence_locked(&vrend_state.fence_wait_list,
-                                     fence_id,
-                                     &seen_first,
-                                     &fence);
-      /* consider signaled when no active ctx0 fence at all */
-      if (!found && !seen_first)
-         found = true;
-   }
-
-   if (found) {
-      if (fence)
-         ret = virgl_egl_export_fence(egl, fence->eglsyncobj, out_fd) ? 0 : -EINVAL;
-      else
-         ret = virgl_egl_export_signaled_fence(egl, out_fd) ? 0 : -EINVAL;
-   }
-
-   if (vrend_state.sync_thread)
-      mtx_unlock(&vrend_state.fence_mutex);
-
-   return ret;
-#else
-   (void)fence_id;
-   (void)out_fd;
-#endif
-   return -EINVAL;
 }
 
 void vrend_renderer_get_meminfo(struct vrend_context *ctx, uint32_t res_handle)
