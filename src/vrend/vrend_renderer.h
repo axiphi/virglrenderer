@@ -463,7 +463,6 @@ int vrend_renderer_create_fence(struct vrend_context *ctx,
 void vrend_renderer_check_fences(void);
 
 int vrend_renderer_create_ctx0_fence(uint32_t fence_id);
-int vrend_renderer_export_ctx0_fence(uint32_t fence_id, int* out_fd);
 
 bool vrend_hw_switch_context(struct vrend_context *ctx, bool now);
 uint32_t vrend_renderer_object_insert(struct vrend_context *ctx, void *data,
