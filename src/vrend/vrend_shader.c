@@ -4820,8 +4820,19 @@ get_source_info(struct dump_ctx *ctx,
          }
          else if (input->name == TGSI_SEMANTIC_PRIMID)
             strbuf_fmt(src_buf, "%s(vec4(intBitsToFloat(%s)))", get_string(stypeprefix), input->glsl_name);
-         else if (input->name == TGSI_SEMANTIC_FACE)
-            strbuf_fmt(src_buf, "%s(%s ? 1.0 : -1.0)", get_string(stypeprefix), input->glsl_name);
+         else if (input->name == TGSI_SEMANTIC_FACE) {
+            const char *face_swizzle = swizzle;
+            const char *abs_close = "";
+
+            if (isfloatabsolute && face_swizzle[0] == ')') {
+               abs_close = ")";
+               face_swizzle++;
+            }
+
+            strbuf_fmt(src_buf, "%s(vec4(%s(%s ? 1.0 : -1.0)%s)%s)",
+                       get_string(stypeprefix), prefix, input->glsl_name,
+                       abs_close, face_swizzle);
+         }
          else if (input->name == TGSI_SEMANTIC_CLIPDIST) {
             if (ctx->prog_type == TGSI_PROCESSOR_FRAGMENT)
                load_clipdist_fs(ctx, src_buf, src, j, get_string(stypeprefix), input->first);
@@ -5958,10 +5969,10 @@ iter_instruction(struct tgsi_iterate_context *iter,
       emit_buff(&ctx->glsl_strbufs, "%s = %s(pow(%s, %s));\n", dsts[0], get_string(dinfo.dstconv), srcs[0], srcs[1]);
       break;
    case TGSI_OPCODE_CMP:
-      emit_buff(&ctx->glsl_strbufs, "%s = mix(%s, %s, greaterThanEqual(%s, vec4(0.0)))%s;\n", dsts[0], srcs[1], srcs[2], srcs[0], writemask);
+      emit_buff(&ctx->glsl_strbufs, "%s = mix(%s, %s, greaterThanEqual(vec4(%s), vec4(0.0)))%s;\n", dsts[0], srcs[1], srcs[2], srcs[0], writemask);
       break;
    case TGSI_OPCODE_UCMP:
-      emit_buff(&ctx->glsl_strbufs, "%s = mix(%s, %s, notEqual(floatBitsToUint(%s), uvec4(0.0)))%s;\n", dsts[0], srcs[2], srcs[1], srcs[0], writemask);
+      emit_buff(&ctx->glsl_strbufs, "%s = mix(%s, %s, notEqual(floatBitsToUint(vec4(%s)), uvec4(0.0)))%s;\n", dsts[0], srcs[2], srcs[1], srcs[0], writemask);
       break;
    case TGSI_OPCODE_END:
       if (iter->processor.Processor == TGSI_PROCESSOR_VERTEX) {
