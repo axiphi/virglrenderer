@@ -829,9 +829,16 @@ amdgpu_ccmd_cs_submit(struct drm_context *dctx, struct vdrm_ccmd_req *hdr)
    const struct drm_amdgpu_bo_list_entry *bo_handles_in = NULL;
    struct drm_amdgpu_bo_list_entry *bo_list = NULL;
    struct drm_amdgpu_cs_chunk *chunks;
+   amdgpu_context_handle actx;
    unsigned num_chunks = 0;
    uint64_t seqno = 0;
    int r;
+
+   actx = _mesa_hash_table_u64_search(ctx->id_to_ctx, (uintptr_t)req->ctx_id);
+   if (actx == NULL) {
+      print(0, "Bad context ID %" PRIu32, req->ctx_id);
+      return -ENOENT;
+   }
 
    struct amdgpu_ccmd_rsp *rsp;
    rsp = drm_context_rsp(dctx, hdr, sizeof(struct amdgpu_ccmd_rsp));
@@ -860,9 +867,6 @@ amdgpu_ccmd_cs_submit(struct drm_context *dctx, struct vdrm_ccmd_req *hdr)
       r = -EINVAL;
       goto end;
    }
-
-   amdgpu_context_handle actx = _mesa_hash_table_u64_search(ctx->id_to_ctx,
-                                                            (uintptr_t)req->ctx_id);
 
    struct desc {
       uint16_t chunk_id;
