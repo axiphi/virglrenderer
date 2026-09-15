@@ -25,7 +25,15 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "util/u_math.h"
+
+#ifdef ENABLE_VREND
 #include <epoxy/gl.h>
+#include "pipe/p_state.h"
+#include "util/u_format.h"
+#include "vrend/vrend_renderer.h"
+#include "vrend/vrend_winsys.h"
+#endif
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -37,14 +45,10 @@
 #include "mman_win32.h"
 #endif
 
-#include "pipe/p_state.h"
-#include "util/u_format.h"
-#include "util/u_math.h"
 #include "vkr_allocator.h"
 #include "drm_renderer.h"
 #include "proxy/proxy_renderer.h"
-#include "vrend/vrend_renderer.h"
-#include "vrend/vrend_winsys.h"
+#include "virgl_protocol.h"
 
 #ifndef WIN32
 #include "util/libsync.h"
@@ -55,6 +59,7 @@
 
 #include "virgl_context.h"
 #include "virgl_fence.h"
+#include "virgl_iov.h"
 #include "virgl_resource.h"
 #include "virgl_util.h"
 
@@ -82,6 +87,7 @@ static int virgl_renderer_resource_create_internal(struct virgl_renderer_resourc
                                                    UNUSED struct iovec *iov, UNUSED uint32_t num_iovs,
                                                    void *image)
 {
+#ifdef ENABLE_VREND
    struct virgl_resource *res;
    struct pipe_resource *pipe_res;
    struct vrend_renderer_resource_create_args vrend_args =  { 0 };
@@ -120,6 +126,13 @@ static int virgl_renderer_resource_create_internal(struct virgl_renderer_resourc
    res->map_info = map_info;
 
    return 0;
+#else
+   (void)args;
+   (void)iov;
+   (void)num_iovs;
+   (void)image;
+   return -EINVAL;
+#endif
 }
 
 int virgl_renderer_resource_create(struct virgl_renderer_resource_create_args *args,
@@ -181,8 +194,12 @@ void virgl_renderer_fill_caps(uint32_t set, uint32_t version,
    switch (set) {
    case VIRTGPU_DRM_CAPSET_VIRGL:
    case VIRTGPU_DRM_CAPSET_VIRGL2:
+#ifdef ENABLE_VREND
       if (state.vrend_initialized)
          vrend_renderer_fill_caps(set, version, (union virgl_caps *)caps);
+#else
+      (void)version;
+#endif
       break;
    case VIRTGPU_DRM_CAPSET_VENUS:
       if (state.proxy_initialized)
@@ -246,10 +263,14 @@ int virgl_renderer_context_create_with_flags(uint32_t ctx_id,
    switch (capset_id) {
    case VIRTGPU_DRM_CAPSET_VIRGL:
    case VIRTGPU_DRM_CAPSET_VIRGL2:
+#ifdef ENABLE_VREND
       if (!state.vrend_initialized)
          return EINVAL;
       ctx = vrend_renderer_context_create(ctx_id, nlen, name);
       break;
+#else
+      return EINVAL;
+#endif
    case VIRTGPU_DRM_CAPSET_VENUS:
       if (!state.proxy_initialized)
          return EINVAL;
@@ -348,11 +369,15 @@ int virgl_renderer_transfer_write_iov(uint32_t handle,
       return ctx->transfer_3d(ctx, res, &transfer_info,
                               VIRGL_TRANSFER_TO_HOST);
    } else {
+#ifdef ENABLE_VREND
       if (!res->pipe_resource)
          return EINVAL;
 
       return vrend_renderer_transfer_pipe(res->pipe_resource, &transfer_info,
                                           VIRGL_TRANSFER_TO_HOST);
+#else
+      return EINVAL;
+#endif
    }
 }
 
@@ -387,11 +412,15 @@ int virgl_renderer_transfer_read_iov(uint32_t handle, uint32_t ctx_id,
       return ctx->transfer_3d(ctx, res, &transfer_info,
                               VIRGL_TRANSFER_FROM_HOST);
    } else {
+#ifdef ENABLE_VREND
       if (!res->pipe_resource)
          return EINVAL;
 
       return vrend_renderer_transfer_pipe(res->pipe_resource, &transfer_info,
                                           VIRGL_TRANSFER_FROM_HOST);
+#else
+      return EINVAL;
+#endif
    }
 }
 
@@ -424,9 +453,13 @@ void virgl_renderer_resource_detach_iov(int res_handle, struct iovec **iov_p, in
 int virgl_renderer_create_fence(int client_fence_id, UNUSED uint32_t ctx_id)
 {
    TRACE_FUNC();
+#ifdef ENABLE_VREND
    const uint32_t fence_id = (uint32_t)client_fence_id;
    if (state.vrend_initialized)
       return vrend_renderer_create_ctx0_fence(fence_id);
+#else
+   (void)client_fence_id;
+#endif
    return EINVAL;
 }
 
@@ -465,8 +498,10 @@ int virgl_renderer_context_get_poll_fd(uint32_t ctx_id)
 
 void virgl_renderer_force_ctx_0(void)
 {
+#ifdef ENABLE_VREND
    if (state.vrend_initialized)
       vrend_renderer_force_ctx_0();
+#endif
 }
 
 void virgl_renderer_ctx_attach_resource(int ctx_id, int res_handle)
@@ -509,12 +544,14 @@ static int virgl_renderer_resource_get_info_common(int res_handle,
    if (!res->pipe_resource)
       return 0;
 
+#ifdef ENABLE_VREND
    vrend_renderer_resource_get_info(res->pipe_resource,
                                     (struct vrend_renderer_resource_info *)info);
 
 #ifdef WIN32
    if (d3d_tex2d)
       ret = vrend_renderer_resource_d3d11_texture2d(res->pipe_resource, d3d_tex2d);
+#endif
 #endif
 
    return ret;
@@ -529,6 +566,7 @@ int virgl_renderer_resource_get_info(int res_handle,
    if ((ret = virgl_renderer_resource_get_info_common(res_handle, info, NULL)) != 0)
        return ret;
 
+#ifdef ENABLE_VREND
    if (state.winsys_initialized) {
       return vrend_winsys_get_attrs_for_texture(info->tex_id,
                                                 info->virgl_format,
@@ -537,6 +575,7 @@ int virgl_renderer_resource_get_info(int res_handle,
                                                 NULL,
                                                 NULL);
    }
+#endif
 
    return 0;
 }
@@ -554,6 +593,7 @@ int virgl_renderer_resource_get_info_ext(int res_handle,
 
    info_ext->version = VIRGL_RENDERER_RESOURCE_INFO_EXT_VERSION;
 
+#ifdef ENABLE_VREND
    if (state.winsys_initialized) {
       return vrend_winsys_get_attrs_for_texture(info_ext->base.tex_id,
                                                 info_ext->base.virgl_format,
@@ -562,6 +602,7 @@ int virgl_renderer_resource_get_info_ext(int res_handle,
                                                 &info_ext->planes,
                                                 &info_ext->modifiers);
    }
+#endif
 
    return 0;
 }
@@ -575,7 +616,12 @@ void virgl_renderer_get_cap_set(uint32_t cap_set, uint32_t *max_ver,
    switch (cap_set) {
    case VIRTGPU_DRM_CAPSET_VIRGL:
    case VIRTGPU_DRM_CAPSET_VIRGL2:
+#ifdef ENABLE_VREND
       vrend_renderer_get_cap_set(cap_set, max_ver, max_size);
+#else
+      *max_ver = 0;
+      *max_size = 0;
+#endif
       break;
    case VIRTGPU_DRM_CAPSET_VENUS:
       *max_ver = 0;
@@ -596,15 +642,27 @@ void virgl_renderer_get_rect(int resource_id, struct iovec *iov, unsigned int nu
                              uint32_t offset, int x, int y, int width, int height)
 {
    TRACE_FUNC();
+#ifdef ENABLE_VREND
    struct virgl_resource *res = virgl_resource_lookup(resource_id);
    if (!res || !res->pipe_resource)
       return;
 
    vrend_renderer_get_rect(res->pipe_resource, iov, num_iovs, offset, x, y,
                            width, height);
+#else
+   (void)resource_id;
+   (void)iov;
+   (void)num_iovs;
+   (void)offset;
+   (void)x;
+   (void)y;
+   (void)width;
+   (void)height;
+#endif
 }
 
 
+#ifdef ENABLE_VREND
 static void ctx0_fence_retire(uint64_t fence_id, UNUSED void *retire_data)
 {
    // ctx0 fence_id is created from uint32_t but stored internally as uint64_t,
@@ -708,6 +766,7 @@ static const struct vrend_if_cbs vrend_cbs = {
    destroy_gl_context_surfaceless,
    make_current_surfaceless,
 };
+#endif
 
 static int
 proxy_renderer_cb_get_server_fd(uint32_t version)
@@ -728,10 +787,16 @@ void *virgl_renderer_get_cursor_data(uint32_t resource_id, uint32_t *width, uint
    if (!res || !res->pipe_resource)
       return NULL;
 
+#ifdef ENABLE_VREND
    vrend_renderer_force_ctx_0();
    return vrend_renderer_get_cursor_contents(res->pipe_resource,
                                              width,
                                              height);
+#else
+   (void)width;
+   (void)height;
+   return NULL;
+#endif
 }
 
 static bool
@@ -752,8 +817,10 @@ virgl_context_foreach_retire_fences(struct virgl_context *ctx,
 void virgl_renderer_poll(void)
 {
    TRACE_FUNC();
+#ifdef ENABLE_VREND
    if (state.vrend_initialized)
       vrend_renderer_poll();
+#endif
 
    struct virgl_context_foreach_args args;
    args.callback = virgl_context_foreach_retire_fences;
@@ -763,8 +830,10 @@ void virgl_renderer_poll(void)
 void virgl_renderer_cleanup(UNUSED void *cookie)
 {
    TRACE_FUNC();
+#ifdef ENABLE_VREND
    if (state.vrend_initialized)
       vrend_renderer_prepare_reset();
+#endif
 
    if (state.context_initialized)
       virgl_context_table_cleanup();
@@ -775,14 +844,18 @@ void virgl_renderer_cleanup(UNUSED void *cookie)
    if (state.proxy_initialized)
       proxy_renderer_fini();
 
+#ifdef ENABLE_VREND
    if (state.vrend_initialized)
       vrend_renderer_fini();
+#endif
 
    if (state.fence_initialized)
       virgl_fence_table_cleanup();
 
+#ifdef ENABLE_VREND
    if (state.winsys_initialized || state.external_winsys_initialized)
       vrend_winsys_cleanup();
+#endif
 
    if (state.drm_initialized)
       drm_renderer_fini();
@@ -827,8 +900,12 @@ int virgl_renderer_init(void *cookie, int flags, struct virgl_renderer_callbacks
 
    if (!state.resource_initialized) {
       const struct virgl_resource_pipe_callbacks *pipe_cbs =
+#ifdef ENABLE_VREND
          (flags & VIRGL_RENDERER_NO_VIRGL) ? NULL :
          vrend_renderer_get_pipe_callbacks();
+#else
+         NULL;
+#endif
 
       ret = virgl_resource_table_init(pipe_cbs);
       if (ret) {
@@ -847,6 +924,7 @@ int virgl_renderer_init(void *cookie, int flags, struct virgl_renderer_callbacks
       state.context_initialized = true;
    }
 
+#ifdef ENABLE_VREND
    if (!state.winsys_initialized && !(flags & VIRGL_RENDERER_NO_VIRGL) &&
        (flags & (VIRGL_RENDERER_USE_EGL | VIRGL_RENDERER_USE_GLX))) {
       int drm_fd = -1;
@@ -928,6 +1006,13 @@ int virgl_renderer_init(void *cookie, int flags, struct virgl_renderer_callbacks
       }
       state.vrend_initialized = true;
    }
+#else
+   if (!(flags & VIRGL_RENDERER_NO_VIRGL)) {
+      virgl_error("vrend OpenGL renderer is not compiled in\n");
+      ret = -1;
+      goto fail;
+   }
+#endif
 
    if (!state.proxy_initialized && (flags & VIRGL_RENDERER_RENDER_SERVER)) {
       ret = proxy_renderer_init(&proxy_cbs, flags | VIRGL_RENDERER_NO_VIRGL);
@@ -969,24 +1054,38 @@ fail:
 int virgl_renderer_get_fd_for_texture(uint32_t tex_id, int *fd)
 {
    TRACE_FUNC();
+#ifdef ENABLE_VREND
    if (state.winsys_initialized)
       return vrend_winsys_get_fd_for_texture(tex_id, fd);
+#else
+   (void)tex_id;
+   (void)fd;
+#endif
    return -1;
 }
 
 int virgl_renderer_get_fd_for_texture2(uint32_t tex_id, int *fd, int *stride, int *offset)
 {
    TRACE_FUNC();
+#ifdef ENABLE_VREND
    if (state.winsys_initialized)
       return vrend_winsys_get_fd_for_texture2(tex_id, fd, stride, offset);
+#else
+   (void)tex_id;
+   (void)fd;
+   (void)stride;
+   (void)offset;
+#endif
    return -1;
 }
 
 void virgl_renderer_reset(void)
 {
    TRACE_FUNC();
+#ifdef ENABLE_VREND
    if (state.vrend_initialized)
       vrend_renderer_prepare_reset();
+#endif
 
    if (state.context_initialized)
       virgl_context_table_reset();
@@ -997,8 +1096,10 @@ void virgl_renderer_reset(void)
    if (state.proxy_initialized)
       proxy_renderer_reset();
 
+#ifdef ENABLE_VREND
    if (state.vrend_initialized)
       vrend_renderer_reset();
+#endif
 
    if (state.drm_initialized)
       drm_renderer_reset();
@@ -1007,8 +1108,10 @@ void virgl_renderer_reset(void)
 int virgl_renderer_get_poll_fd(void)
 {
    TRACE_FUNC();
+#ifdef ENABLE_VREND
    if (state.vrend_initialized)
       return vrend_renderer_get_poll_fd();
+#endif
 
    return -1;
 }
@@ -1075,7 +1178,11 @@ static int virgl_renderer_export_query(void *execute_args, uint32_t execute_size
 
 
    if (res->pipe_resource) {
+#ifdef ENABLE_VREND
       return vrend_renderer_export_query(res->pipe_resource, export_query);
+#else
+      return -EINVAL;
+#endif
    } else if (!export_query->in_export_fds) {
       /* Untyped resources are expected to be exported with
        * virgl_renderer_resource_export_blob instead and have no type
@@ -1169,7 +1276,7 @@ int virgl_renderer_resource_create_blob(const struct virgl_renderer_resource_cre
    if (args->size == 0)
       return -EINVAL;
    if (has_guest_storage) {
-      const size_t iov_size = vrend_get_iovec_size(args->iovecs, args->num_iovs);
+      const size_t iov_size = virgl_get_iovec_size(args->iovecs, args->num_iovs);
       if (iov_size < args->size)
          return -EINVAL;
    } else {
@@ -1237,11 +1344,15 @@ int virgl_renderer_resource_map(uint32_t res_handle, void **out_map, uint64_t *o
       return -EINVAL;
 
    if (res->pipe_resource) {
+#ifdef ENABLE_VREND
       ret = vrend_renderer_resource_map(res->pipe_resource, &map, &map_size);
       if (!ret) {
          res->map_size = map_size;
          res->mapped_from_pipe_resource = true;
       }
+#else
+      ret = -EINVAL;
+#endif
    } else {
       enum virgl_resource_fd_type fd_type = res->fd_type;
       enum virgl_resource_fd_type export_fd_type = res->fd_type;
@@ -1354,8 +1465,12 @@ int virgl_renderer_resource_unmap(uint32_t res_handle)
       return -EINVAL;
 
    if (res->mapped_from_pipe_resource) {
+#ifdef ENABLE_VREND
       assert(res->pipe_resource);
       ret = vrend_renderer_resource_unmap(res->pipe_resource);
+#else
+      ret = -EINVAL;
+#endif
    } else {
       switch (res->fd_type) {
       case VIRGL_RESOURCE_FD_DMABUF:

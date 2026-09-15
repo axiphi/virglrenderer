@@ -41,9 +41,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include "vrend_iov.h"
+#include "virgl_iov.h"
 
-size_t vrend_get_iovec_size(const struct iovec *iov, int iovlen) {
+size_t virgl_get_iovec_size(const struct iovec *iov, int iovlen) {
   size_t size = 0;
 
   while (iovlen > 0) {
@@ -55,7 +55,7 @@ size_t vrend_get_iovec_size(const struct iovec *iov, int iovlen) {
   return size;
 }
 
-size_t vrend_read_from_iovec(const struct iovec *iov, int iovlen,
+size_t virgl_read_from_iovec(const struct iovec *iov, int iovlen,
 			     size_t offset,
 			     char *buf, size_t count)
 {
@@ -85,7 +85,7 @@ size_t vrend_read_from_iovec(const struct iovec *iov, int iovlen,
   return read;
 }
 
-size_t vrend_write_to_iovec(const struct iovec *iov, int iovlen,
+size_t virgl_write_to_iovec(const struct iovec *iov, int iovlen,
 			 size_t offset, const char *buf, size_t count)
 {
   size_t written = 0;
@@ -113,7 +113,7 @@ size_t vrend_write_to_iovec(const struct iovec *iov, int iovlen,
   return written;
 }
 
-size_t vrend_read_from_iovec_cb(const struct iovec *iov, int iovlen,
+size_t virgl_read_from_iovec_cb(const struct iovec *iov, int iovlen,
 				size_t offset, size_t count,
 				iov_cb iocb, void *cookie)
 {
@@ -159,7 +159,7 @@ size_t vrend_read_from_iovec_cb(const struct iovec *iov, int iovlen,
  *                   to use a temporary storage for the copy operation.
  * \return           -1 on failure, 0 on success
  */
-int vrend_copy_iovec(const struct iovec *src_iov, int src_iovlen, size_t src_offset,
+int virgl_copy_iovec(const struct iovec *src_iov, int src_iovlen, size_t src_offset,
 		     const struct iovec *dst_iov, int dst_iovlen, size_t dst_offset,
 		     size_t count, char *buf)
 {
@@ -184,13 +184,13 @@ int vrend_copy_iovec(const struct iovec *src_iov, int src_iovlen, size_t src_off
   if (!buf)
     return -1;
 
-  nread = vrend_read_from_iovec(src_iov, src_iovlen, src_offset, buf, count);
+  nread = virgl_read_from_iovec(src_iov, src_iovlen, src_offset, buf, count);
   if (nread != count) {
     ret = -1;
     goto out;
   }
 
-  nwritten = vrend_write_to_iovec(dst_iov, dst_iovlen, dst_offset, buf, count);
+  nwritten = virgl_write_to_iovec(dst_iov, dst_iovlen, dst_offset, buf, count);
   if (nwritten != count) {
     ret = -1;
     goto out;

@@ -7478,7 +7478,7 @@ static void vrend_pipe_resource_attach_iov(struct pipe_resource *pres,
    res->num_iovs = iov_count;
 
    if (has_bit(res->storage_bits, VREND_STORAGE_HOST_SYSTEM_MEMORY)) {
-      vrend_write_to_iovec(res->iov, res->num_iovs, 0,
+      virgl_write_to_iovec(res->iov, res->num_iovs, 0,
             res->ptr, res->base.width0);
    }
 }
@@ -7489,7 +7489,7 @@ static void vrend_pipe_resource_detach_iov(struct pipe_resource *pres,
    struct vrend_resource *res = (struct vrend_resource *)pres;
 
    if (has_bit(res->storage_bits, VREND_STORAGE_HOST_SYSTEM_MEMORY)) {
-      vrend_read_from_iovec(res->iov, res->num_iovs, 0,
+      virgl_read_from_iovec(res->iov, res->num_iovs, 0,
             res->ptr, res->base.width0);
    }
 
@@ -8991,7 +8991,7 @@ static void read_transfer_data(const struct iovec *iov,
                                bool invert)
 {
    int blsize = util_format_get_blocksize(format);
-   uint32_t size = vrend_get_iovec_size(iov, num_iovs);
+   uint32_t size = virgl_get_iovec_size(iov, num_iovs);
    uint32_t send_size = util_format_get_nblocks(format, box->width,
                                               box->height) * blsize * box->depth;
    uint32_t bwx = util_format_get_nblocksx(format, box->width) * blsize;
@@ -8999,14 +8999,14 @@ static void read_transfer_data(const struct iovec *iov,
    int d, h;
 
    if ((send_size == size || bh == 1) && !invert && box->depth == 1)
-      vrend_read_from_iovec(iov, num_iovs, offset, data, send_size);
+      virgl_read_from_iovec(iov, num_iovs, offset, data, send_size);
    else {
       if (invert) {
          for (d = 0; d < box->depth; d++) {
             uint32_t myoffset = offset + d * src_layer_stride;
             for (h = bh - 1; h >= 0; h--) {
                void *ptr = data + (h * bwx) + d * (bh * bwx);
-               vrend_read_from_iovec(iov, num_iovs, myoffset, ptr, bwx);
+               virgl_read_from_iovec(iov, num_iovs, myoffset, ptr, bwx);
                myoffset += src_stride;
             }
          }
@@ -9015,7 +9015,7 @@ static void read_transfer_data(const struct iovec *iov,
             uint32_t myoffset = offset + d * src_layer_stride;
             for (h = 0; h < bh; h++) {
                void *ptr = data + (h * bwx) + d * (bh * bwx);
-               vrend_read_from_iovec(iov, num_iovs, myoffset, ptr, bwx);
+               virgl_read_from_iovec(iov, num_iovs, myoffset, ptr, bwx);
                myoffset += src_stride;
             }
          }
@@ -9034,7 +9034,7 @@ static void write_transfer_data(struct pipe_resource *res,
                                 bool invert)
 {
    int blsize = util_format_get_blocksize(res->format);
-   uint32_t size = vrend_get_iovec_size(iov, num_iovs);
+   uint32_t size = virgl_get_iovec_size(iov, num_iovs);
    uint32_t send_size = util_format_get_nblocks(res->format, box->width,
                                                 box->height) * blsize * box->depth;
    uint32_t bwx = util_format_get_nblocksx(res->format, box->width) * blsize;
@@ -9043,13 +9043,13 @@ static void write_transfer_data(struct pipe_resource *res,
    uint32_t stride = dst_stride ? dst_stride : util_format_get_nblocksx(res->format, u_minify(res->width0, level)) * blsize;
 
    if ((send_size == size || bh == 1) && !invert && box->depth == 1) {
-      vrend_write_to_iovec(iov, num_iovs, offset, data, send_size);
+      virgl_write_to_iovec(iov, num_iovs, offset, data, send_size);
    } else if (invert) {
       for (d = 0; d < box->depth; d++) {
          uint32_t myoffset = offset + d * stride * u_minify(res->height0, level);
          for (h = bh - 1; h >= 0; h--) {
             void *ptr = data + (h * bwx) + d * (bh * bwx);
-            vrend_write_to_iovec(iov, num_iovs, myoffset, ptr, bwx);
+            virgl_write_to_iovec(iov, num_iovs, myoffset, ptr, bwx);
             myoffset += stride;
          }
       }
@@ -9058,7 +9058,7 @@ static void write_transfer_data(struct pipe_resource *res,
          uint32_t myoffset = offset + d * stride * u_minify(res->height0, level);
          for (h = 0; h < bh; h++) {
             void *ptr = data + (h * bwx) + d * (bh * bwx);
-            vrend_write_to_iovec(iov, num_iovs, myoffset, ptr, bwx);
+            virgl_write_to_iovec(iov, num_iovs, myoffset, ptr, bwx);
             myoffset += stride;
          }
       }
@@ -9162,7 +9162,7 @@ static bool check_iov_bounds(struct vrend_resource *res,
                              const struct iovec *iov, int num_iovs)
 {
    GLuint transfer_size;
-   GLuint iovsize = vrend_get_iovec_size(iov, num_iovs);
+   GLuint iovsize = virgl_get_iovec_size(iov, num_iovs);
    GLuint valid_stride, valid_layer_stride;
 
    /* If the transfer specifies a stride, verify that it's at least as large as
@@ -9301,14 +9301,14 @@ static int vrend_renderer_transfer_write_iov(struct vrend_context *ctx,
 
    if ((is_only_bit(res->storage_bits, VREND_STORAGE_GUEST_MEMORY) ||
        has_bit(res->storage_bits, VREND_STORAGE_HOST_SYSTEM_MEMORY)) && res->iov) {
-      return vrend_copy_iovec(iov, num_iovs, info->offset,
+      return virgl_copy_iovec(iov, num_iovs, info->offset,
                               res->iov, res->num_iovs, info->box->x,
                               info->box->width, res->ptr);
    }
 
    if (has_bit(res->storage_bits, VREND_STORAGE_HOST_SYSTEM_MEMORY)) {
       assert(!res->iov);
-      vrend_read_from_iovec(iov, num_iovs, info->offset,
+      virgl_read_from_iovec(iov, num_iovs, info->offset,
                             res->ptr + info->box->x, info->box->width);
       return 0;
    }
@@ -9326,9 +9326,9 @@ static int vrend_renderer_transfer_write_iov(struct vrend_context *ctx,
       data = glMapBufferRange(res->target, info->box->x, info->box->width, map_flags);
       if (data == NULL) {
          virgl_error("Map failed for element buffer\n");
-         vrend_read_from_iovec_cb(iov, num_iovs, info->offset, info->box->width, &iov_buffer_upload, &d);
+         virgl_read_from_iovec_cb(iov, num_iovs, info->offset, info->box->width, &iov_buffer_upload, &d);
       } else {
-         vrend_read_from_iovec(iov, num_iovs, info->offset, data, info->box->width);
+         virgl_read_from_iovec(iov, num_iovs, info->offset, data, info->box->width);
          glUnmapBuffer(res->target);
       }
       glBindBufferARB(res->target, 0);
@@ -9615,7 +9615,7 @@ static int vrend_transfer_send_getteximage(struct vrend_resource *res,
    char *data;
    int elsize = util_format_get_blocksize(res->base.format);
    int compressed = util_format_is_compressed(res->base.format);
-   uint32_t iov_size = vrend_get_iovec_size(iov, num_iovs);
+   uint32_t iov_size = virgl_get_iovec_size(iov, num_iovs);
    GLenum target;
    uint32_t send_offset = 0;
    format = tex_conv_table[res->base.format].glformat;
@@ -9970,14 +9970,14 @@ static int vrend_renderer_transfer_send_iov(struct vrend_context *ctx,
 {
    if ((is_only_bit(res->storage_bits, VREND_STORAGE_GUEST_MEMORY) ||
        has_bit(res->storage_bits, VREND_STORAGE_HOST_SYSTEM_MEMORY)) && res->iov) {
-      return vrend_copy_iovec(res->iov, res->num_iovs, info->box->x,
+      return virgl_copy_iovec(res->iov, res->num_iovs, info->box->x,
                               iov, num_iovs, info->offset,
                               info->box->width, res->ptr);
    }
 
    if (has_bit(res->storage_bits, VREND_STORAGE_HOST_SYSTEM_MEMORY)) {
       assert(!res->iov);
-      vrend_write_to_iovec(iov, num_iovs, info->offset,
+      virgl_write_to_iovec(iov, num_iovs, info->offset,
                            res->ptr + info->box->x, info->box->width);
       return 0;
    }
@@ -9988,7 +9988,7 @@ static int vrend_renderer_transfer_send_iov(struct vrend_context *ctx,
       if (!data)
          virgl_error("Unable to open buffer for reading %d\n", res->target);
       else
-         vrend_write_to_iovec(iov, num_iovs, info->offset, data, info->box->width);
+         virgl_write_to_iovec(iov, num_iovs, info->offset, data, info->box->width);
       glUnmapBuffer(res->target);
       glBindBufferARB(res->target, 0);
    } else {
@@ -11560,7 +11560,7 @@ static bool vrend_check_query(struct vrend_query *query)
    state.query_state = VIRGL_QUERY_STATE_DONE;
 
    if (query->res->iov) {
-      if (vrend_write_to_iovec(query->res->iov, query->res->num_iovs, 0,
+      if (virgl_write_to_iovec(query->res->iov, query->res->num_iovs, 0,
                                (const void *) &state, sizeof(state)) != sizeof(state))
          virgl_error("Query state does not fit IOV size\n");
    } else {
@@ -13807,7 +13807,7 @@ vrend_renderer_pipe_resource_get_layout(struct vrend_context *ctx,
    }
 
    if (out_res->iov) {
-      if (vrend_write_to_iovec(out_res->iov, out_res->num_iovs, 0,
+      if (virgl_write_to_iovec(out_res->iov, out_res->num_iovs, 0,
                                (const void *) &layout, sizeof(layout)) != sizeof(layout)) {
          virgl_error("resource layout does not fit IOV size\n");
          vrend_report_context_error(ctx, VIRGL_ERROR_CTX_ILLEGAL_RESOURCE, out_res_id);
@@ -13841,7 +13841,7 @@ vrend_renderer_pipe_query_format_modifier(struct vrend_context *ctx, uint32_t re
    vrend_vk_get_supported_formats(&fmt_mod);
 
    if (res->iov) {
-      if (vrend_write_to_iovec(res->iov, res->num_iovs, 0,
+      if (virgl_write_to_iovec(res->iov, res->num_iovs, 0,
                                (const void *) &fmt_mod, sizeof(fmt_mod)) != sizeof(fmt_mod)) {
          virgl_error("format modifier list does not fit IOV size\n");
          vrend_report_context_error(ctx, VIRGL_ERROR_CTX_ILLEGAL_RESOURCE, res_id);

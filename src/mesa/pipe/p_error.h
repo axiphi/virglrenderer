@@ -1,8 +1,8 @@
 /**************************************************************************
- *
- * Copyright 2008 VMware, Inc.
+ * 
+ * Copyright 2007 VMware, Inc.
  * All Rights Reserved.
- *
+ * 
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
  * "Software"), to deal in the Software without restriction, including
@@ -10,11 +10,11 @@
  * distribute, sub license, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- *
+ * 
  * The above copyright notice and this permission notice (including the
  * next paragraph) shall be included in all copies or substantial portions
  * of the Software.
- *
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
  * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
@@ -22,76 +22,34 @@
  * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
+ * 
  **************************************************************************/
 
-/**
- * General purpose hash table.
- *  
- * @author José Fonseca <jfonseca@vmware.com>
- */
-
-#ifndef U_HASH_TABLE_H_
-#define U_HASH_TABLE_H_
-
-
-#include "pipe/p_defines.h"
-
+#ifndef P_ERROR_H
+#define P_ERROR_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-   
 /**
- * Generic purpose hash table.
+ * Gallium error codes.
+ *
+ * - A zero value always means success.
+ * - A negative value always means failure.
+ * - The meaning of a positive value is function dependent.
  */
-struct util_hash_table;
-
-
-/**
- * Create an hash table.
- * 
- * @param hash hash function
- * @param compare should return 0 for two equal keys.
- */
-struct util_hash_table *
-util_hash_table_create(uint32_t (*hash)(const void *key),
-                       bool (*equal)(const void *key1, const void *key2),
-                       void (*destroy)(void *value));
-
-
-enum pipe_error
-util_hash_table_set(struct util_hash_table *ht,
-                    void *key,
-                    void *value);
-
-void *
-util_hash_table_get(struct util_hash_table *ht,
-                    void *key);
-
-
-void
-util_hash_table_remove(struct util_hash_table *ht,
-                       void *key);
-
-
-void
-util_hash_table_clear(struct util_hash_table *ht);
-
-
-enum pipe_error
-util_hash_table_foreach(struct util_hash_table *ht,
-                        enum pipe_error (*callback)
-                        (void *key, void *value, void *data),
-                        void *data);
-
-void
-util_hash_table_destroy(struct util_hash_table *ht);
-
+enum pipe_error {
+   PIPE_OK = 0,
+   PIPE_ERROR = -1,    /**< Generic error */
+   PIPE_ERROR_BAD_INPUT = -2,
+   PIPE_ERROR_OUT_OF_MEMORY = -3,
+   PIPE_ERROR_RETRY = -4
+   /* TODO */
+};
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* U_HASH_TABLE_H_ */
+#endif

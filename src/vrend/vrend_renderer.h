@@ -31,7 +31,7 @@
 #include "virgl_protocol.h"
 #include "vrend_debug.h"
 #include "vrend_tweaks.h"
-#include "vrend_iov.h"
+#include "virgl_iov.h"
 #ifdef ENABLE_GBM
 #include "vrend_winsys_gbm.h"
 #else

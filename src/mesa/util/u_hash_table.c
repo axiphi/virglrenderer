@@ -37,17 +37,13 @@
  * @author José Fonseca <jfonseca@vmware.com>
  */
 
+#include <assert.h>
 
 #include "pipe/p_compiler.h"
-#include "util/u_debug.h"
-
-#include "cso_cache/cso_hash.h"
-
-#include "util/u_memory.h"
 #include "util/u_pointer.h"
 #include "util/u_hash_table.h"
 #include "util/hash_table.h"
-#include "ralloc.h"
+#include "util/ralloc.h"
 
 
 struct util_hash_table

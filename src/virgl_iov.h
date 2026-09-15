@@ -21,10 +21,11 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  **************************************************************************/
-#ifndef VREND_IOV_H
-#define VREND_IOV_H
+#ifndef VIRGL_IOV_H
+#define VIRGL_IOV_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include "config.h"
 
@@ -36,6 +37,8 @@ struct iovec {
     size_t iov_len;
 };
 #endif
+
+struct pipe_box;
 
 struct vrend_transfer_info {
    unsigned int level;
@@ -59,16 +62,16 @@ struct vrend_transfer_info {
 
 typedef void (*iov_cb)(void *cookie, unsigned int doff, void *src, int len);
 
-size_t vrend_get_iovec_size(const struct iovec *iov, int iovlen);
-size_t vrend_read_from_iovec(const struct iovec *iov, int iov_cnt,
+size_t virgl_get_iovec_size(const struct iovec *iov, int iovlen);
+size_t virgl_read_from_iovec(const struct iovec *iov, int iov_cnt,
                              size_t offset, char *buf, size_t bytes);
-size_t vrend_write_to_iovec(const struct iovec *iov, int iov_cnt,
+size_t virgl_write_to_iovec(const struct iovec *iov, int iov_cnt,
                             size_t offset, const char *buf, size_t bytes);
 
-size_t vrend_read_from_iovec_cb(const struct iovec *iov, int iov_cnt,
-                          size_t offset, size_t bytes, iov_cb iocb, void *cookie);
+size_t virgl_read_from_iovec_cb(const struct iovec *iov, int iov_cnt,
+                                size_t offset, size_t bytes, iov_cb iocb, void *cookie);
 
-int vrend_copy_iovec(const struct iovec *src_iov, int src_iovlen, size_t src_offset,
+int virgl_copy_iovec(const struct iovec *src_iov, int src_iovlen, size_t src_offset,
                      const struct iovec *dst_iov, int dst_iovlen, size_t dst_offset,
                      size_t count, char *buf);
 

@@ -22,17 +22,22 @@
 #
 
 subdir('mesa')
-subdir('gallium')
+if with_vrend
+   subdir('gallium')
+else
+   gallium_dep = not_found
+   inc_gallium = []
+endif
 
 virgl_sources = [
    'virgl_context.c',
    'virgl_fence.c',
+   'virgl_iov.c',
    'virgl_resource.c',
    'virgl_util.c',
 ]
 
 vrend_sources = [
-   'vrend/iov.c',
    'vrend/vrend_blitter.c',
    'vrend/vrend_debug.c',
    'vrend/vrend_decode.c',
@@ -176,8 +181,7 @@ video_sources = [
 ]
 
 virgl_depends = [
-   gallium_dep,
-   epoxy_dep,
+   mesa_dep,
    libdrm_dep,
    thread_dep,
    m_dep,
@@ -196,23 +200,29 @@ if with_tracing == 'sysprof'
    virgl_depends += [sysprof_dep]
 endif
 
-virgl_sources += vrend_sources
+if with_vrend
+   virgl_depends += [
+      gallium_dep,
+      epoxy_dep,
+   ]
+   virgl_sources += vrend_sources
 
-if gbm_dep.found()
-   virgl_sources += vrend_winsys_gbm_sources
-   virgl_depends += [gbm_dep]
+   if gbm_dep.found()
+      virgl_sources += vrend_winsys_gbm_sources
+      virgl_depends += [gbm_dep]
+   endif
+
+   if have_egl
+      virgl_sources += vrend_winsys_egl_sources
+   endif
+
+   if have_glx
+      virgl_sources += vrend_winsys_glx_sources
+      virgl_depends += [glx_dep]
+   endif
 endif
 
-if have_egl
-   virgl_sources += vrend_winsys_egl_sources
-endif
-
-if have_glx
-   virgl_sources += vrend_winsys_glx_sources
-   virgl_depends += [glx_dep]
-endif
-
-if with_venus and gbm_dep.found()
+if with_venus and gbm_dep.found() and with_vrend
    virgl_sources += vrend_venus_interop_sources
 endif
 
@@ -303,7 +313,7 @@ pkg.generate(libvirglrenderer,
 libvirglrenderer_dep = declare_dependency(
    link_with: libvirglrenderer,
    include_directories: libvirgl_inc,
-   dependencies : [libvirgl_dep, gallium_dep]
+   dependencies : [libvirgl_dep, mesa_dep] + (with_vrend ? [gallium_dep] : [])
 )
 
 # Version header
