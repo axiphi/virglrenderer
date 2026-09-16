@@ -78,6 +78,7 @@ struct vrend_context;
 #define VREND_STORAGE_GL_IMMUTABLE       BIT(6)
 #define VREND_STORAGE_GL_MEMOBJ          BIT(7)
 #define VREND_STORAGE_D3D_TEXTURE        BIT(8)
+#define VREND_STORAGE_EGL_IMAGE_EXTERNAL BIT(9)
 
 struct vrend_resource {
    struct pipe_resource base;

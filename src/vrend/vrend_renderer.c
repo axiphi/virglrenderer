@@ -8662,6 +8662,7 @@ static void vrend_resource_gbm_init(struct vrend_resource *gr, uint32_t format)
    }
 
    gr->storage_bits |= VREND_STORAGE_EGL_IMAGE;
+   gr->storage_bits |= VREND_STORAGE_EGL_IMAGE_EXTERNAL;
 
 #else
    (void)format;
@@ -8728,7 +8729,10 @@ static int vrend_resource_alloc_texture(struct vrend_resource *gr,
       } else if (has_feature(feat_egl_image)) {
          gr->storage_bits &= ~VREND_STORAGE_GL_IMMUTABLE;
          assert(gr->target == GL_TEXTURE_2D);
-         glEGLImageTargetTexture2DOES(gr->target, (GLeglImageOES) image_oes);
+         GLenum egl_tex_target = gr->storage_bits & VREND_STORAGE_EGL_IMAGE_EXTERNAL
+                                    ? GL_TEXTURE_EXTERNAL_OES
+                                    : GL_TEXTURE_2D;
+         glEGLImageTargetTexture2DOES(egl_tex_target, (GLeglImageOES) image_oes);
          if ((format == VIRGL_FORMAT_NV12 ||
               format == VIRGL_FORMAT_NV21 ||
               format == VIRGL_FORMAT_YV12 ||
@@ -13475,6 +13479,7 @@ vrend_renderer_pipe_resource_set_type(struct vrend_context *ctx,
          }
 
          gr->storage_bits |= VREND_STORAGE_EGL_IMAGE;
+         gr->storage_bits |= VREND_STORAGE_EGL_IMAGE_EXTERNAL;
 
          ret = vrend_resource_alloc_texture(gr, virgl_format, gr->egl_image);
          if (ret) {
