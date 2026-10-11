@@ -13,7 +13,7 @@
 #include "config.h"
 #include "virgl_util.h"
 
-#define VIRGL_RENDERER_CAPSET_HSAKMT 8
+#define VIRGL_RENDERER_CAPSET_HSAKMT 10
 
 #ifdef ENABLE_ROCM
 
